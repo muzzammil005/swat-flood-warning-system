@@ -1,0 +1,219 @@
+# Local-development Docker Compose.
+#
+# Run the ENTIRE stack (backend + PostGIS + Redis) with ONE command:
+#
+#     docker compose up --build -d
+#
+# The backend image is built via `Dockerfile` (target `dev`, which includes
+# ruff, mypy, and pytest). Source code and tests are bind-mounted into the
+# container so edits on your host instantly reload uvicorn (hot reload).
+# No Python, pip, or venv needed on the host — everything runs inside the
+# container. Same env on Windows, macOS, Linux, and CI.
+#
+# Why we don't bind to host 5432/6379 by default:
+#   Many machines already have Postgres+Redis running locally (including the
+#   machine that reported Terminal#1-131). Postgres and Redis are ONLY
+#   reachable via the compose-internal bridge network (`postgres:5432`,
+#   `redis:6379`) by default — which is exactly what `backend` and `tests`
+#   need. If you *also* want host-level access (e.g. to connect psql or a
+#   GUI), enable the `expose-db-ports` profile (see below).
+#
+# Optional host access (only if you don't have local PG/Redis already):
+#     docker compose --profile expose-db-ports up --build -d
+#   ⚠️ This publishes to HOST_POSTGRES_PORT / HOST_REDIS_PORT (default
+#      15432 / 16379 — deliberately non-standard so they never collide with
+#      a local install on 5432 / 6379). Override via .env:
+#          HOST_POSTGRES_PORT=5432
+#          HOST_REDIS_PORT=6379
+#
+# Lint / typecheck / test WITHOUT installing anything locally:
+#
+#     docker compose run --rm tests ruff check backend/src tests --fix
+#     docker compose run --rm tests ruff format  backend/src tests
+#     docker compose run --rm tests mypy
+#     docker compose run --rm tests pytest
+#
+# The `tests` service shares the image, volumes, and network with `backend`
+# so it reaches PostGIS/Redis via service names exactly as the real backend
+# does.
+#
+# Tear down (keeps PostGIS data):
+#     docker compose down
+# Tear down AND wipe database volume:
+#     docker compose down -v
+
+name: swat-flood
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-swat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-swat_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-swat_flood}
+    volumes:
+      - swat_postgis_data:/var/lib/postgresql/data
+    # Container-network only by default.
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-swat} -d ${POSTGRES_DB:-swat_flood}"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+    networks:
+      - swat-net
+
+  # Optional: publish Postgres port to host on a non-default port so a local
+  # Postgres on 5432 still runs (the bug that bit Terminal#1-131).
+  postgres-publish:
+    image: alpine/socat:latest
+    profiles: ["expose-db-ports"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - "TCP-LISTEN:5432,fork,reuseaddr"
+      - "TCP:postgres:5432"
+    ports:
+      - "127.0.0.1:${HOST_POSTGRES_PORT:-15432}:5432"
+    networks:
+      - swat-net
+
+  redis:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    # Container-network only by default.
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+    networks:
+      - swat-net
+
+  redis-publish:
+    image: alpine/socat:latest
+    profiles: ["expose-db-ports"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    command:
+      - "TCP-LISTEN:6379,fork,reuseaddr"
+      - "TCP:redis:6379"
+    ports:
+      - "127.0.0.1:${HOST_REDIS_PORT:-16379}:6379"
+    networks:
+      - swat-net
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: base
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # In-container networking: reach services by hostname, not localhost.
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-swat}:${POSTGRES_PASSWORD:-swat_dev_password}@postgres:5432/${POSTGRES_DB:-swat_flood}"
+      REDIS_URL: "redis://redis:6379/0"
+      ENVIRONMENT: "${ENVIRONMENT:-dev}"
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY:-replace_me_with_a_long_random_string_from_secrets}"
+      JWT_ALGORITHM: "${JWT_ALGORITHM:-HS256}"
+      JWT_ISSUER: "${JWT_ISSUER:-swat-flood-backend}"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "${ACCESS_TOKEN_EXPIRE_MINUTES:-30}"
+      # Browser origins allowed to call the API. Add your production CDN/domain here.
+      # Use a literal "*" ONLY in dev — it auto-disables allow_credentials per RFC6454.
+      CORS_ALLOW_ORIGINS: "${CORS_ALLOW_ORIGINS:-http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000}"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      # Hot reload: bind-mount host source over the copied source in the image.
+      - ./backend:/app/backend
+      - ./tests:/app/tests:ro
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+    ports:
+      - "8000:8000"
+    command: ["bash", "/app/backend/entrypoint.sh"]
+    networks:
+      - swat-net
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # `tests` — one-shot runner for ruff / mypy / pytest (profile: tests).
+  # Example:  docker compose run --rm tests pytest
+  # ---------------------------------------------------------------------------
+  tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    profiles: ["tests"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-swat}:${POSTGRES_PASSWORD:-swat_dev_password}@postgres:5432/${POSTGRES_DB:-swat_flood}"
+      REDIS_URL: "redis://redis:6379/0"
+      ENVIRONMENT: "test"
+      JWT_SECRET_KEY: "test-secret-do-not-use-in-prod-32-chars-long!"
+      JWT_ALGORITHM: "HS256"
+      JWT_ISSUER: "swat-flood-backend"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "5"
+      CORS_ALLOW_ORIGINS: "http://localhost:3000"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./backend:/app/backend:ro
+      - ./tests:/app/tests
+      - ./alembic:/app/alembic:ro
+      - ./alembic.ini:/app/alembic.ini:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+      # Let tests write .pytest_cache / .mypy_cache / .coverage back to host
+      # so your IDE can read them.
+      - ./.pytest_cache:/app/.pytest_cache
+      - ./.mypy_cache:/app/.mypy_cache
+      - ./.ruff_cache:/app/.ruff_cache
+    working_dir: /app
+    entrypoint: []
+    command: ["pytest"]
+    networks:
+      - swat-net
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - swat-net
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  swat_postgis_data:
+
+networks:
+  swat-net:
+    driver: bridge

@@ -1,0 +1,54 @@
+/* Ensure map fills container completely */
+.leaflet-container {
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 1;
+}
+
+/* Override Leaflet default styles for custom markers */
+.leaflet-risk-marker {
+  background: none !important;
+  border: none !important;
+}
+
+.leaflet-risk-marker .leaflet-icon {
+  background: none !important;
+  border: none !important;
+}
+
+.leaflet-risk-marker svg {
+  display: block;
+}
+
+/* Ensure our markers appear above tile layers */
+.leaflet-marker-icon {
+  z-index: 1000 !important;
+}
+
+/* Custom location control styles */
+.leaflet-control-locate {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.leaflet-control-locate:hover {
+  background-color: #f9fafb !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+}
+
+.leaflet-control-locate:active {
+  transform: scale(0.95) !important;
+}
+
+.user-location-marker {
+  background: none !important;
+  border: none !important;
+}
+
+/* Ensure our custom controls appear above tiles */
+.leaflet-control {
+  z-index: 1000 !important;
+}

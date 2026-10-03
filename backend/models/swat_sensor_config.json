@@ -1,0 +1,23 @@
+{
+  "reference_capacity_m": 5.0,
+  "tiers": {
+    "Normal": [
+      0,
+      60
+    ],
+    "Watch": [
+      60,
+      80
+    ],
+    "Warning": [
+      80,
+      95
+    ],
+    "Danger": [
+      95,
+      999
+    ]
+  },
+  "upstream_extreme_threshold": 1.5,
+  "status": "PROVISIONAL - not calibrated against real Swat-specific gauge data. Recalibrate reference_capacity_m per sensor once installed (see Section 11 Step 45)."
+}

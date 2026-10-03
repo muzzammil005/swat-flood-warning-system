@@ -1,0 +1,892 @@
+================================================================================
+          SWAT RIVER BASIN FLOOD EARLY-WARNING SYSTEM (FYP)
+          COMPLETE SYSTEM ARCHITECTURE, CODEBASE & ML REPORT
+================================================================================
+
+Date of Analysis: October 2026
+System Scope: Backend (FastAPI) + Web Portal (Next.js) + Mobile App (Flutter) + ML Engine (LightGBM)
+Architectural Pattern: Clean Architecture (Onion Pattern) - "One Backend, Two Clients"
+Primary River Network: Kalam (Headwater) -> Bahrain -> Madyan -> Mingora (Downstream Outlet)
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. Executive Summary & Core Architectural Principles
+2. Complete Tech Stack Overview
+3. Repository & Directory Structure (File-by-File Inventory)
+4. Database Architecture & Data Models (PostgreSQL + PostGIS)
+5. REST API Specification & Endpoint Catalog
+6. Machine Learning & Risk Prediction Engine (Detailed Analysis for Model Replacement)
+7. Mobile Application Architecture (Flutter)
+8. Web Portal Architecture (Next.js 15)
+9. Deployment, Containerization & Operations
+10. Step-by-Step Developer Guide: How to Replace/Upgrade the ML Model
+
+================================================================================
+1. EXECUTIVE SUMMARY & CORE ARCHITECTURAL PRINCIPLES
+================================================================================
+The Swat Flood Early-Warning System is an industrial-quality, production-ready flood
+forecasting and emergency coordination platform designed for the Swat River Basin 
+in Khyber Pakhtunkhwa, Pakistan.
+
+The system continuously assesses flood threats across four critical river zones:
+  1. Kalam Bazaar (Headwater, elevation ~2061m)
+  2. Bahrain (Middle Reach 1, elevation ~1470m)
+  3. Madyan (Middle Reach 2, elevation ~1475m)
+  4. Mingora City (Major Population Center, elevation ~930m)
+
+Core Architectural Principles:
+  1. Domain-First, Framework-Second (Clean Onion Architecture):
+     All critical business rules—such as local risk assessment, cascading river
+     escalation, and threshold calculations—are implemented as pure Python and
+     Dart domain classes with zero framework dependencies (no FastAPI, no 
+     SQLAlchemy, no Flutter UI imports).
+  2. One Backend, Two Clients:
+     The web dashboard and mobile app communicate exclusively with the single
+     versioned REST API (http://localhost:8000/api). There is zero duplicated
+     business logic between web and mobile.
+  3. Config-Driven Zones (Basin Portability):
+     Thresholds, geographic coordinates, and upstream-downstream topology are
+     stored in the database rather than hardcoded in source code. This allows 
+     adapting the system to any other river basin (e.g., Kabul River, Indus) 
+     without refactoring code.
+  4. Genuine Data Structures & Algorithms (DSA):
+     - Directed Acyclic Graph (DAG) + Kahn's Topological Sort: Solves upstream 
+       cascading flood escalation in O(V + E) time while guaranteeing cycle detection.
+     - PostGIS Geospatial Spatial Index & Haversine Distance: O(log N) nearest-zone 
+       detection for mobile GPS users instead of linear loops.
+     - LRU / Time-to-Live (TTL) Caching: Prevents external weather API rate-limit exhaustion.
+  5. Multi-Tiered Risk Model:
+     - LOW: Safe / normal base water level and standard precipitation.
+     - MEDIUM: Water warning threshold reached OR moderate rain anomaly.
+     - HIGH: Water critical threshold reached OR high flood probability (>= 0.70).
+     - DANGER: Multi-factor compound event (critical water + heavy rain) OR 
+       cascading surge propagated from upstream OR active manual admin override.
+
+================================================================================
+2. COMPLETE TECH STACK OVERVIEW
+================================================================================
+
+[A] BACKEND & CORE INFRASTRUCTURE
+  - Language: Python >= 3.11
+  - Web Framework: FastAPI >= 0.110 (ASGI, async/await native)
+  - ASGI Web Server: Uvicorn[standard] >= 0.27
+  - Database ORM: SQLAlchemy 2.0 (AsyncIO engine with asyncpg driver)
+  - Database: PostgreSQL 16 + PostGIS 3.4 (Alpine container)
+  - Spatial Extension: GeoAlchemy2 >= 0.14, Shapely >= 2.0
+  - Migrations: Alembic >= 1.13
+  - In-Memory Cache: Redis 7.2 (with hiredis C-parser parser)
+  - Validation & Settings: Pydantic v2.6, Pydantic-Settings v2.2
+  - Security & Auth: Python-Jose (JWT HS256), Passlib (Argon2 password hashing)
+  - Rate Limiting: SlowAPI 0.1.9 (sliding-window / token-bucket via Redis/memory)
+  - HTTP Client: HTTPX >= 0.27 (Async client for Open-Meteo external weather calls)
+
+[B] MACHINE LEARNING & EXPLAINABILITY
+  - Core Classifier: LightGBM >= 4.0 (LGBMClassifier with unbalance compensation)
+  - Serialization: Joblib >= 1.3
+  - Data Processing: NumPy >= 1.24 (< 2.0), Pandas >= 2.0 (< 2.3)
+  - Preprocessing: Scikit-Learn >= 1.3 (LabelEncoder, StandardScaler)
+  - Model Explainability: SHAP >= 0.44 (TreeExplainer with positive-class attribution)
+  - Training Environment: Jupyter Notebooks / Google Colab (Python 3.10/3.11)
+
+[C] WEB PORTAL (DASHBOARD & ADMIN)
+  - Framework: Next.js 15 (React 19, TypeScript, App Router)
+  - Styling: Tailwind CSS 3.3, Vanilla CSS
+  - Mapping: Leaflet 1.9, React-Leaflet 4.2
+  - Charting: Chart.js 4.5, React-ChartJS-2 5.3
+  - Animations: Framer Motion 13.1
+  - Notifications: React-Hot-Toast 2.6
+  - Icons: Lucide-React
+  - API Client: Generated OpenAPI TypeScript client (`openapi-typescript-codegen`)
+  - Server State: Typed fetch layer with custom caching & token interceptors
+
+[D] MOBILE APPLICATION
+  - Framework: Flutter 3.12+ (Dart SDK >= 3.12.2)
+  - HTTP & Network: Dio ^5.7.0 (with retry, dynamic base URL, and auth interceptor)
+  - Dependency Injection: GetIt ^8.0.0 (Service Locator)
+  - Mapping: Flutter_Map ^7.0.0, LatLong2 ^0.9.1
+  - Geolocation: Geolocator ^13.0.0
+  - Charts: FL_Chart ^0.70.0
+  - Storage & Cache: SharedPreferences ^2.3.5, Flutter_Secure_Storage ^9.2.4
+  - Emergency Alerts: Vibration ^3.2.0, Flutter_Ringtone_Player ^4.0.0
+  - Design & UI: Google Fonts (Inter), Material 3 Dark Palette
+
+[E] DEVOPS & CONTAINERIZATION
+  - Docker Compose: Multi-container orchestration (postgres, redis, backend, web, tests)
+  - Multi-stage Dockerfile: Base image (Python 3.11-slim), Dev target (tests/linters)
+  - Linters & Code Quality: Ruff >= 0.3, Mypy >= 1.9 (strict type checking)
+  - Automated Scripts: Windows batch automation (`start_project.bat`, `enable_docker_prerequisites.bat`)
+
+================================================================================
+3. REPOSITORY & DIRECTORY STRUCTURE (FILE-BY-FILE INVENTORY)
+================================================================================
+
+The repository is structured cleanly with clear separation of concerns:
+
+ROOT DIRECTORY:
+├── .env.example                  # Template configuration for local env variables
+├── .env                          # Local runtime environment variables (untracked)
+├── .dockerignore                 # Excludes build caches from Docker contexts
+├── .gitignore                    # Git ignore file for Python, JS, Flutter, IDEs
+├── .pre-commit-config.yaml       # Ruff and formatting git hooks
+├── Dockerfile                    # Multi-stage Docker build for backend & test runner
+├── docker-compose.yml            # Complete stack: PostGIS, Redis, Backend, Web, Tests
+├── pyproject.toml                # Python package metadata, dependencies & tool configs
+├── alembic.ini                   # Alembic database migration runner config
+├── README.md                     # University FYP overview and quick start guide
+├── swat-flood-architecture.md    # Master architecture blueprint and viva preparation guide
+├── start_project.bat             # 1-click launcher: checks Docker, builds, starts, opens browser
+├── enable_docker_prerequisites.bat# Windows script to enable VirtualMachinePlatform & WSL
+├── alembic/                      # Database migrations
+│   ├── env.py                    # Migration environment runner connected to SQLAlchemy metadata
+│   └── versions/                 # Versioned migration scripts
+│       ├── 0001_create_postgis_tables.py     # Base PostGIS tables & enum types
+│       ├── 0002_add_zone_thresholds.py      # Zone water/rain warning thresholds
+│       ├── 0003_add_zone_terrain_features.py# 26 static ML terrain columns
+│       └── 0004_add_ml_fields.py            # SHAP & anomaly ratio fields on risk_assessments
+├── backend/                      # FastAPI Backend Application
+│   ├── entrypoint.sh             # Container bootstrap: runs migrations, seeds data, starts uvicorn
+│   ├── openapi.json              # Exported OpenAPI 3.1 specification (source of truth)
+│   ├── models/                   # Frozen Machine Learning Models & Training Notebook
+│   │   ├── swat_flood_model.joblib          # Trained LightGBM classifier
+│   │   ├── swat_feature_columns.joblib      # List of 26 ordered feature column names
+│   │   ├── swat_landcover_encoder.joblib    # Sklearn LabelEncoder for landcover categorical codes
+│   │   ├── swat_optimal_threshold.joblib    # Optimal decision threshold (~0.557)
+│   │   ├── Swat_4Zones_Static_Features_FINAL.csv # Ground-truth static terrain metrics for 4 zones
+│   │   ├── Swat_4Zones_Rainfall_Derived_Features.csv # 10-year rainfall stats (std & anomaly)
+│   │   ├── swat_sensor_config.json          # Provisional sensor gauge calibration config
+│   │   └── Swat_Flood_Model_Training.ipynb  # End-to-end training, EDA, and tuning notebook
+│   ├── scripts/                  # Operational and CLI maintenance scripts
+│   │   ├── export_openapi.py                # Dumps FastAPI openapi.json for frontend client gen
+│   │   ├── load_zone_terrain_features.py    # Parses static CSV and upserts into database
+│   │   ├── refresh_risk_assessments.py      # Real-time batch predictor (Open-Meteo + ML + DAG)
+│   │   ├── seed_demo_data.py                # Idempotent database seeder (zones, admin, sensors)
+│   │   ├── seed_history.py                  # Generates historical data for charts
+│   │   └── verify_ml_artifacts.py           # Unit verification script testing model & encoder
+│   └── src/                      # Clean Architecture source tree
+│       ├── domain/               # Pure Python domain logic (ZERO dependencies)
+│       │   ├── entities/         # Core business entities
+│       │   │   ├── zone.py                  # Zone identity, name, coordinates, upstream FK
+│       │   │   ├── risk_assessment.py       # Append-only risk evaluations & probabilities
+│       │   │   ├── sensor_reading.py        # Append-only water level gauge measurements
+│       │   │   ├── weather_snapshot.py      # Rainfall windows & TTL
+│       │   │   ├── alert.py                 # CAP-inspired emergency alerts
+│       │   │   ├── community_report.py      # Citizen crowdsourced incident reports
+│       │   │   ├── manual_override.py       # Admin emergency threat override
+│       │   │   ├── resource_center.py       # Relief depots
+│       │   │   ├── inventory_item.py        # Relief supplies (sandbags, boats, etc.)
+│       │   │   ├── user.py                  # Operator & admin accounts
+│       │   │   ├── api_key.py               # M2M machine authentication
+│       │   │   └── audit_log_entry.py       # Immutable administrative action log
+│       │   ├── value_objects/    # Immutable domain value objects
+│       │   │   ├── risk_tier.py             # IntEnum: LOW (1), MEDIUM (2), HIGH (3), DANGER (4)
+│       │   │   ├── coordinates.py           # WGS84 latitude / longitude
+│       │   │   ├── water_level.py           # Water level measurements with cm validation
+│       │   │   ├── rainfall_window.py       # Rain millimetres & duration hours
+│       │   │   └── zone_thresholds.py       # Warning, critical, and heavy rain limits
+│       │   ├── services/         # Domain services
+│       │   │   ├── risk_engine.py           # Local deterministic risk & probability assessor
+│       │   │   └── escalation_engine.py     # Graph-based upstream->downstream DAG escalation
+│       │   └── exceptions/       # Domain exception hierarchy (DomainError, NotFoundError)
+│       ├── application/          # Use cases & abstract ports
+│       │   ├── use_cases/        # Orchestration logic
+│       │   │   ├── zones.py                 # Zone retrieval, summaries, and sensor health
+│       │   │   ├── reports.py               # Citizen report submission & moderation
+│       │   │   ├── alerts.py                # Alert queries & broadcasting
+│       │   │   ├── auth.py                  # User authentication & token issuance
+│       │   │   ├── admin.py                 # Overrides, user creation, password reset
+│       │   │   └── resource_centers.py      # Relief center inventory queries
+│       │   └── ports/            # Abstract interfaces for infrastructure decoupling
+│       │       ├── repositories.py          # Database repository protocols
+│       │       ├── weather.py               # Weather service provider port
+│       │       ├── cache.py                 # Key-value cache interface
+│       │       ├── notifications.py         # Push notification interface (FCM)
+│       │       └── auth.py                  # Token service and password hasher interfaces
+│       ├── infrastructure/       # Concrete adapters for databases, network, and ML
+│       │   ├── db/
+│       │   │   ├── models.py                # SQLAlchemy 2.0 Declarative ORM models
+│       │   │   ├── session.py               # Async engine, connection pool, get_session()
+│       │   │   ├── mappers.py               # Pure Domain <-> ORM model translation
+│       │   │   └── repositories/            # SQLAlchemy implementations of ports
+│       │   ├── ml/
+│       │   │   ├── artifacts.py             # Model loader & SHAP TreeExplainer builder
+│       │   │   └── predictor.py             # Feature assembly, anomaly ratio, predict()
+│       │   ├── auth/                        # Argon2 hasher & JWT token generation
+│       │   ├── cache/                       # Redis async connection & caching adapter
+│       │   ├── weather/                     # Open-Meteo external HTTP API client
+│       │   └── notifications/               # Firebase Cloud Messaging stub adapter
+│       └── interfaces/           # Delivery & presentation layer
+│           ├── http/
+│           │   ├── main.py                  # FastAPI app factory, CORS, exception handlers
+│           │   ├── rate_limiter.py          # SlowAPI rate limiter setup
+│           │   ├── auth_dependencies.py     # JWT validation dependencies (require_admin)
+│           │   └── routers/                 # Modular HTTP controllers
+│           │       ├── zones.py             # /api/zones endpoints
+│           │       ├── alerts.py            # /api/alerts endpoints
+│           │       ├── reports.py           # /api/reports endpoints
+│           │       ├── auth.py              # /api/auth/login
+│           │       └── admin.py             # /api/admin/* and /api/resource-centers
+│           └── schemas/                     # Pydantic v2 request/response schemas
+├── tests/                        # Comprehensive test suite
+│   ├── unit/                     # Fast unit tests (domain entities, risk engine, ML predictor)
+│   ├── integration/              # Integration tests against PostgreSQL and Redis
+│   └── contract/                 # API schema contract verification
+├── web/                          # Next.js 15 Web Portal
+│   ├── app/                      # App router directory
+│   │   ├── layout.tsx            # Global layout, header, emergency alert banner, modals
+│   │   ├── page.tsx              # Public flood monitoring dashboard
+│   │   └── admin/                # Admin sub-route
+│   │       ├── page.tsx          # Protected admin dashboard (overrides, moderation, users)
+│   │       └── login/page.tsx    # Admin login screen
+│   ├── components/               # React UI Components
+│   │   ├── ZoneMap.tsx           # Leaflet interactive map with river lines & zone markers
+│   │   ├── RiskTrendChart.tsx    # 24h risk trend line chart
+│   │   ├── RainfallVsRiskChart.tsx# Dual-axis rainfall vs flood probability chart
+│   │   ├── SubmitReportModal.tsx # Citizen incident submission dialog
+│   │   ├── ZoneDetailsModal.tsx  # In-depth sensor & threshold modal
+│   │   ├── AdminDashboard.tsx    # Complete admin management interface
+│   │   ├── RedAlertProvider.tsx  # System-wide red alert audio/visual broadcaster
+│   │   └── dashboard/            # Overview widgets (MetricsOverview, ZoneFeed, LiveAlerts)
+│   ├── shared/                   # Shared UI kit and handcrafted API fetch client
+│   └── src/api/generated/        # Code-generated OpenAPI client
+└── mobile/                       # Flutter Mobile Application
+    ├── pubspec.yaml              # Flutter dependencies and assets configuration
+    └── lib/
+        ├── main.dart             # App entry, dark theme setup, bottom navigation stack
+        ├── core/
+        │   ├── constants/        # API endpoints, URLs, colors
+        │   ├── di/               # GetIt dependency injection registry
+        │   ├── dsa/              # RiverGraph DAG & SpatialIndex Haversine implementations
+        │   ├── models/           # DTOs: ZoneModel, AlertModel, ReportModel, ResourceCenterModel
+        │   ├── network/          # ApiClient backed by Dio with error mapping
+        │   └── services/         # LocationService (GPS), StorageService, NotificationService
+        └── features/             # Feature-first screens
+            ├── dashboard/        # Home screen with nearest-zone alert & river overview
+            ├── gis_map/          # Interactive map screen using FlutterMap & OpenStreetMap
+            ├── alerts/           # CAP emergency warning cards & broadcast triggers
+            ├── community_reporting/ # Citizen incident submission & photo/observation list
+            ├── resource_centers/ # Relief supply depot directory
+            ├── zone_detail/      # Gauge view, water level history, and thresholds
+            └── settings/         # Base URL selector (emulator, LAN, adb reverse)
+
+================================================================================
+4. DATABASE ARCHITECTURE & DATA MODELS (POSTGRESQL + POSTGIS)
+================================================================================
+
+The database is built on PostgreSQL 16 with the PostGIS 3.4 spatial extension enabled.
+It strictly enforces relational integrity, native Postgres ENUMs, spatial indexes, 
+and append-only audit rules for time-series observations.
+
+[A] NATIVE POSTGRES ENUMS:
+  - risk_tier: 'LOW', 'MEDIUM', 'HIGH', 'DANGER'
+  - sensor_source: 'real', 'test'
+  - community_report_status: 'Pending', 'Approved', 'Rejected'
+  - user_role: 'admin', 'responder'
+
+[B] TABLES AND SCHEMA SPECIFICATIONS:
+
+1. `zones` (Geographic Sub-catchment Zones)
+   - `id` (VARCHAR(255), Primary Key): e.g. "zone-kalam", "zone-mingora"
+   - `name` (VARCHAR(255), Unique, Not Null): e.g. "Kalam Bazaar"
+   - `coordinates` (Geography(Point, 4326), Not Null): WGS84 point (Longitude, Latitude)
+   - `upstream_zone_id` (VARCHAR(255), Nullable, FK -> zones.id ON DELETE SET NULL): 
+     Self-referential foreign key modeling the river flow direction.
+   - Spatial Index: GiST index on `coordinates` for sub-millisecond proximity queries.
+
+2. `zone_thresholds` (Operational Calibration Knobs)
+   - `id` (VARCHAR(255), Primary Key)
+   - `zone_id` (VARCHAR(255), FK -> zones.id ON DELETE CASCADE, Unique Constraint)
+   - `water_warning_level_cm` (FLOAT, Not Null): Gauge level triggering MEDIUM risk (e.g. 150.0 cm)
+   - `water_critical_level_cm` (FLOAT, Not Null): Gauge level triggering HIGH risk (e.g. 250.0 cm)
+   - `heavy_rain_threshold_mm` (FLOAT, Not Null): 24h rainfall limit triggering risk escalation
+
+3. `zone_terrain_features` (Static Ground-Truth Geographic ML Features)
+   - `id` (VARCHAR(255), Primary Key)
+   - `zone_id` (VARCHAR(255), FK -> zones.id ON DELETE CASCADE, Unique Constraint)
+   - 26 Static Features Matching Model Input Order:
+     `elevation` (FLOAT), `slope` (FLOAT), `stream_proximity` (FLOAT), 
+     `drainage_density` (FLOAT), `upstream_area` (FLOAT), `hand` (FLOAT - Height Above Nearest Drainage),
+     `landcover_encoded` (INTEGER), `ndvi` (FLOAT), `annual_rain_mean` (FLOAT),
+     `rain_jan` through `rain_dec` (12 FLOAT columns for monthly historical averages),
+     `longitude` (FLOAT), `latitude` (FLOAT), `rainfall_std` (FLOAT),
+     `rainfall_max_anomaly` (FLOAT), `terrain_ruggedness` (FLOAT = slope * elevation).
+
+4. `sensor_readings` (Append-Only River Gauge Measurements)
+   - `id` (VARCHAR(255), Primary Key)
+   - `zone_id` (VARCHAR(255), FK -> zones.id ON DELETE CASCADE)
+   - `water_level_cm` (FLOAT, Not Null): Water level in centimetres
+   - `timestamp` (TIMESTAMPTZ, Not Null): Measurement time
+   - `source` (sensor_source ENUM: 'real' | 'test')
+   - Index: B-Tree Composite Index on `(zone_id, timestamp DESC)` for fast time-window fetches.
+
+5. `weather_snapshots` (Append-Only Rainfall Observations)
+   - `id` (VARCHAR(255), Primary Key)
+   - `zone_id` (VARCHAR(255), FK -> zones.id ON DELETE CASCADE)
+   - `rainfall_mm` (FLOAT, Not Null): Accumulated rainfall amount
+   - `rainfall_hours` (FLOAT, Not Null): Window duration (typically 24.0 or 72.0)
+   - `fetched_at` (TIMESTAMPTZ, Not Null): Fetch timestamp
+   - `ttl_seconds` (BIGINT, Not Null): Cache validity duration
+   - Index: B-Tree Composite Index on `(zone_id, fetched_at DESC)`.
+
+6. `risk_assessments` (Append-Only Prediction & Evaluation Facts)
+   - `id` (VARCHAR(255), Primary Key)
+   - `zone_id` (VARCHAR(255), FK -> zones.id ON DELETE CASCADE)
+   - `tier` (risk_tier ENUM: 'LOW' | 'MEDIUM' | 'HIGH' | 'DANGER')
+   - `probability` (FLOAT, Not Null): Confidence score between 0.0 and 1.0
+   - `explanation` (TEXT, Not Null): Human-readable justification generated by ML/rules
+   - `computed_at` (TIMESTAMPTZ, Not Null)
+   - `combined_rain_mm` (FLOAT, Nullable): Sum of past 7 days + next 72h forecast
+   - `expected_rain_mm` (FLOAT, Nullable): Monthly baseline scaled to 10 days
+   - `rainfall_anomaly_ratio` (FLOAT, Nullable): Ratio of combined to expected rain
+   - `top_contributing_features` (JSON, Nullable): Top 2 SHAP feature names
+   - Index: B-Tree Composite Index on `(zone_id, computed_at DESC)`.
+
+7. `alerts` (CAP-Inspired Emergency Alerts)
+   - `id` (VARCHAR(255), Primary Key)
+   - `zone_id` (VARCHAR(255), FK -> zones.id ON DELETE CASCADE)
+   - `severity` (risk_tier ENUM: 'LOW' | 'MEDIUM' | 'HIGH' | 'DANGER')
+   - `certainty` (VARCHAR(50), Not Null): 'Observed', 'Likely', 'Possible'
+   - `urgency` (VARCHAR(50), Not Null): 'Immediate', 'Expected', 'Future'
+   - `headline` (VARCHAR(255), Not Null)
+   - `description` (TEXT, Not Null)
+   - `sent_at` (TIMESTAMPTZ, Not Null)
+
+8. `community_reports` (Citizen Ground Observations)
+   - `id` (VARCHAR(255), Primary Key)
+   - `zone_id` (VARCHAR(255), FK -> zones.id ON DELETE CASCADE)
+   - `observation` (TEXT, Not Null): Stores "[report_type] description"
+   - `status` (community_report_status ENUM: 'Pending' | 'Approved' | 'Rejected')
+   - `submitted_at` (TIMESTAMPTZ, Not Null)
+
+9. `manual_overrides` (Administrative Emergency Overrides)
+   - `id` (VARCHAR(255), Primary Key)
+   - `zone_id` (VARCHAR(255), FK -> zones.id ON DELETE CASCADE)
+   - `threat_level` (risk_tier ENUM)
+   - `reason` (TEXT, Not Null)
+   - `admin_username` (VARCHAR(255), Not Null)
+   - `timestamp` (TIMESTAMPTZ, Not Null)
+
+10. `resource_centers` & `inventory_items` (Disaster Relief Logistics)
+    - `resource_centers`: `id`, `name`, `location_zone` (FK -> zones.id ON DELETE RESTRICT)
+    - `inventory_items`: `id`, `item_name`, `quantity` (INT), `center_id` (FK -> resource_centers.id ON DELETE CASCADE)
+
+11. `users` & `api_keys` (Authentication & Security)
+    - `users`: `id`, `username` (Unique), `password_hash` (Argon2), `role` ('admin' | 'responder'), `created_at`
+    - `api_keys`: `id`, `key_hash` (Unique), `owner_name`, `is_active` (BOOL)
+    - `audit_log_entries`: `id`, `actor_username`, `action`, `target`, `timestamp`
+
+================================================================================
+5. REST API SPECIFICATION & ENDPOINT CATALOG
+================================================================================
+
+All API routes are prefixed by `/api` and return standard JSON.
+
+--------------------------------------------------------------------------------
+5.1 ZONES ENDPOINTS (`/api/zones`)
+--------------------------------------------------------------------------------
+1. `GET /api/zones/summary`
+   - Description: Returns aggregate count of zones categorized by current risk tier.
+   - Response (200 OK):
+     {
+       "danger": 1,
+       "high": 1,
+       "medium": 0,
+       "low": 2,
+       "safe": 0,
+       "total_zones": 4
+     }
+
+2. `GET /api/zones` (and `GET /api/zones/`)
+   - Description: Lists all zones with latest risk assessment, sensor health, and thresholds.
+     Respects active manual overrides.
+   - Response (200 OK): Array of ZoneListResponse:
+     [
+       {
+         "id": "zone-kalam",
+         "name": "Kalam Bazaar",
+         "coordinates": { "latitude": 35.479, "longitude": 72.596 },
+         "upstream_zone_id": null,
+         "latest_assessment": {
+           "tier": "HIGH",
+           "probability": 0.82,
+           "explanation": "Heavy rainfall (65.0mm) forecasted in next 24 hours.",
+           "computed_at": "2026-10-03T09:00:00Z",
+           "combined_rain_mm": 95.4,
+           "expected_rain_mm": 33.2,
+           "rainfall_anomaly_ratio": 2.87,
+           "top_contributing_features": ["annual_rain_mean", "elevation"]
+         },
+         "thresholds": {
+           "water_warning_level": { "metres": 1.5 },
+           "water_critical_level": { "metres": 2.5 },
+           "heavy_rain_threshold_mm": 40.0
+         },
+         "sensor_health": "online",
+         "is_manual_override": false
+       }, ...
+     ]
+
+3. `GET /api/zones/nearest?lat={float}&lon={float}`
+   - Description: Geospatial nearest-neighbor lookup using PostGIS `<->` distance operator.
+   - Query Parameters: `lat` (float, required), `lon` (float, required).
+   - Response (200 OK):
+     {
+       "zone_id": "zone-mingora",
+       "zone_name": "Mingora City",
+       "coordinates": { "latitude": 34.774, "longitude": 72.361 },
+       "distance_meters": 1420.5,
+       "zone_details": { "name": "Mingora City", ... }
+     }
+
+4. `GET /api/zones/{zone_id}`
+   - Description: Comprehensive zone detail including recent 20 sensor readings, 
+     historical risk assessments, and latest rainfall snapshot.
+   - Response (200 OK): ZoneDetailResponse
+
+5. `GET /api/zones/{zone_id}/risk-trend?window={24h|48h}`
+   - Description: Time-series of probability and tier points for chart plotting.
+   - Response (200 OK):
+     [
+       { "timestamp": "2026-10-03T08:00:00Z", "tier": "MEDIUM", "probability": 0.58 },
+       { "timestamp": "2026-10-03T09:00:00Z", "tier": "HIGH", "probability": 0.74 }
+     ]
+
+6. `GET /api/zones/{zone_id}/rainfall-vs-risk?window={24h|48h}`
+   - Description: Paired time-series aligning rainfall (mm) with risk probability for dual-axis charts.
+   - Response (200 OK):
+     [
+       { "timestamp": "2026-10-03T08:00:00Z", "rainfall_mm": 12.5, "risk_probability": 0.58 }, ...
+     ]
+
+--------------------------------------------------------------------------------
+5.2 ALERTS ENDPOINTS (`/api/alerts`)
+--------------------------------------------------------------------------------
+1. `GET /api/alerts`
+   - Description: Fetches the 20 most recent active alerts across the entire basin.
+   - Response (200 OK):
+     [
+       {
+         "id": "zone-kalam_1727946000",
+         "zone_id": "zone-kalam",
+         "severity": "HIGH",
+         "certainty": "Observed",
+         "urgency": "Immediate",
+         "headline": "HIGH risk alert for Kalam Bazaar",
+         "description": "Critical water level reached with high forecasted rain.",
+         "sent_at": "2026-10-03T09:10:00Z"
+       }
+     ]
+
+2. `POST /api/alerts/broadcast`
+   - Description: Manually broadcast an emergency alert to all mobile and web clients.
+   - Request Body:
+     {
+       "zone_id": "zone-mingora",
+       "severity": "DANGER",
+       "headline": "Immediate Flash Flood Warning",
+       "description": "Upstream surge from Kalam has reached Mingora. Evacuate riverbanks immediately."
+     }
+   - Response (200 OK): AlertListResponse
+
+--------------------------------------------------------------------------------
+5.3 COMMUNITY REPORTS ENDPOINTS (`/api/reports`)
+--------------------------------------------------------------------------------
+1. `POST /api/reports`
+   - Rate Limit: 30 requests/minute, 2 requests/second.
+   - Description: Crowdsource citizen report. If `zone_id` is omitted, `latitude`/`longitude`
+     are used to determine the nearest zone automatically.
+   - Request Body:
+     {
+       "report_type": "flooding",
+       "description": "River embankment breached near Bypass Bridge",
+       "reporter_name": "Ali Khan",
+       "reporter_phone": "+923001234567",
+       "zone_id": "zone-mingora",
+       "latitude": 34.775,
+       "longitude": 72.360
+     }
+   - Response (200 OK): CommunityReportResponse
+
+2. `GET /api/reports?status={Pending|Approved|Rejected}&zone_id={id}`
+   - Rate Limit: 60 requests/minute, 5 requests/second.
+   - Description: List community reports with optional filtering.
+   - Response (200 OK):
+     {
+       "reports": [ ... ],
+       "reports_by_zone": { "zone-mingora": [ ... ] }
+     }
+
+3. `PATCH /api/reports/{report_id}`
+   - Auth: Requires Bearer JWT with `admin` role.
+   - Request Body:
+     {
+       "status": "Approved",
+       "admin_notes": "Verified via local rescue official"
+     }
+   - Response (200 OK): Updated CommunityReportResponse
+
+--------------------------------------------------------------------------------
+5.4 AUTHENTICATION & ADMIN ENDPOINTS
+--------------------------------------------------------------------------------
+1. `POST /api/auth/login`
+   - Rate Limit: 10 requests/minute.
+   - Request Body: { "username": "admin", "password": "password123" }
+   - Response (200 OK):
+     {
+       "access_token": "eyJhbGciOi...",
+       "token_type": "bearer",
+       "user_id": "user-admin-001",
+       "username": "admin",
+       "role": "admin"
+     }
+
+2. `POST /api/admin/overrides`
+   - Auth: Requires Admin JWT.
+   - Description: Overrides computed ML risk for a zone. The latest override remains active.
+   - Request Body:
+     {
+       "zone_id": "zone-bahrain",
+       "threat_level": "DANGER",
+       "reason": "Debris dam formed upstream creating catastrophic breach potential"
+     }
+   - Response (200 OK): Override record details.
+
+3. `GET /api/admin/overrides?zone_id={id}`
+   - Auth: Requires Admin JWT.
+   - Response (200 OK): List of previous overrides indicating `is_active: bool`.
+
+4. `GET /api/resource-centers`
+   - Auth: Public.
+   - Description: Returns active disaster relief depots and their live inventory supplies.
+   - Response (200 OK):
+     [
+       {
+         "id": "rc-mingora",
+         "name": "Mingora Emergency Depot",
+         "location_zone": "zone-mingora",
+         "inventory": [
+           { "id": "rci-mingora-1", "item_name": "Sandbags", "quantity": 500 },
+           { "id": "rci-mingora-5", "item_name": "Inflatable Boats", "quantity": 8 }
+         ]
+       }
+     ]
+
+5. `POST /api/admin/users` & `GET /api/admin/users`
+   - Auth: Requires Admin JWT.
+   - Manage operator accounts (`admin` or `responder`).
+
+6. `POST /api/admin/users/{user_id}/reset-password` & `DELETE /api/admin/users/{user_id}`
+   - Auth: Requires Admin JWT.
+
+--------------------------------------------------------------------------------
+5.5 SYSTEM HEALTH & META
+--------------------------------------------------------------------------------
+1. `GET /health` & `GET /api/health`
+   - Response: { "status": "ok", "service": "swat-flood-backend", "version": "0.1.0", "timestamp": "..." }
+
+2. `GET /`
+   - Response: { "name": "Swat Flood Early-Warning System", "docs": "/docs", "openapi": "/openapi.json" }
+
+================================================================================
+6. MACHINE LEARNING & RISK PREDICTION ENGINE (CRITICAL FOR MODEL REPLACEMENT)
+================================================================================
+
+This section details the exact structure, data flow, features, and algorithms of the 
+AI model so you can seamlessly modify, retrain, or replace it with a new architecture 
+(e.g., LSTM, XGBoost, Random Forest, or a newer LightGBM version).
+
+--------------------------------------------------------------------------------
+6.1 CURRENT MODEL SPECIFICATIONS
+--------------------------------------------------------------------------------
+  - Algorithm: LightGBM Classifier (LGBMClassifier from `lightgbm>=4.0`)
+  - Artifact Location: `backend/models/swat_flood_model.joblib`
+  - Training Data Source: Historical Swat district terrain, hydrology, and precipitation
+    records (Train+Val set: 47,384 samples x 26 features; Test set: 7,810 samples).
+  - Class Balancing: `is_unbalance=True` (trained to overcome severe class imbalance 
+    where flood events constitute ~10-15% of records).
+  - Target Variable: Binary classification (`flood` = 0 [Non-flood] or 1 [Flood]).
+  - Evaluation Performance on Held-Out Test Set:
+    - Overall Accuracy: 94%
+    - Flood Class (1) Precision: 67%
+    - Flood Class (1) Recall: 90% (critical for disaster safety: very few false negatives)
+    - Flood Class (1) F1-Score: 0.77
+    - Non-Flood (0) F1-Score: 0.97
+  - Decision Boundary & Thresholds:
+    - Default Raw Threshold: 0.50
+    - Tuned Optimal Threshold: 0.557343 (saved in `swat_optimal_threshold.joblib`, 
+      optimized via Precision-Recall curve to maximize F1).
+    - HIGH Risk Subthreshold: 0.70 (hardcoded safety floor).
+
+--------------------------------------------------------------------------------
+6.2 THE 26 INPUT FEATURES (STRICT COLUMN ORDER)
+--------------------------------------------------------------------------------
+The model expects a 2D NumPy array of shape `(1, 26)` with dtype `float32`.
+The 26 features MUST appear in this exact order:
+
+ 1. `elevation`: Elevation in metres above sea level (from DEM)
+ 2. `slope`: Slope gradient in degrees
+ 3. `stream_proximity`: Distance to nearest river channel / stream in metres
+ 4. `drainage_density`: Stream length per unit catchment area
+ 5. `upstream_area`: Contributing drainage catchment area in sq km
+ 6. `hand`: Height Above Nearest Drainage in metres (relative hydrological height)
+ 7. `landcover_encoded`: Integer encoded land cover type (using `swat_landcover_encoder.joblib`)
+ 8. `ndvi`: Normalized Difference Vegetation Index (vegetation density)
+ 9. `annual_rain_mean`: Annual mean rainfall (mm) — NOTE: Scaled dynamically at runtime!
+10. `rain_jan`: 10-year mean rainfall for January (mm)
+11. `rain_feb`: 10-year mean rainfall for February (mm)
+12. `rain_mar`: 10-year mean rainfall for March (mm)
+13. `rain_apr`: 10-year mean rainfall for April (mm)
+14. `rain_may`: 10-year mean rainfall for May (mm)
+15. `rain_jun`: 10-year mean rainfall for June (mm)
+16. `rain_jul`: 10-year mean rainfall for July (mm)
+17. `rain_aug`: 10-year mean rainfall for August (mm)
+18. `rain_sep`: 10-year mean rainfall for September (mm)
+19. `rain_oct`: 10-year mean rainfall for October (mm)
+20. `rain_nov`: 10-year mean rainfall for November (mm)
+21. `rain_dec`: 10-year mean rainfall for December (mm)
+22. `longitude`: Geographic longitude (WGS84)
+23. `latitude`: Geographic latitude (WGS84)
+24. `rainfall_std`: 10-year standard deviation of precipitation for the zone
+25. `rainfall_max_anomaly`: Historical maximum rainfall anomaly ratio
+26. `terrain_ruggedness`: Ruggedness index calculated as `slope * elevation`
+
+--------------------------------------------------------------------------------
+6.3 RUNTIME INFERENCE PIPELINE (`infrastructure/ml/predictor.py`)
+--------------------------------------------------------------------------------
+When a prediction is requested for a zone, the following sequence executes:
+
+Step 1: Weather Window Fetching (Open-Meteo)
+  - Fetches past 7 days of actual hourly precipitation (168 hours).
+  - Fetches next 72 hours of forecast hourly precipitation (72 hours).
+  - Sums them into a single 10-day rainfall metric:
+    `combined_rain_mm = past_7day_rain + next_72hr_forecast_rain`
+
+Step 2: Dynamic Climatological Anomaly Scaling
+  - The model was trained with static annual features, but real-time weather changes daily.
+  - The predictor reads the stored monthly baseline for the current month:
+    `monthly_baseline = zone.terrain_features["rain_" + current_month]`
+  - Calculates expected 10-day rainfall:
+    `expected_rain_mm = monthly_baseline * (10.0 / 30.0)`
+  - Calculates the anomaly ratio:
+    `rainfall_anomaly_ratio = combined_rain_mm / expected_rain_mm`
+    (clamped strictly between 0.2 and 5.0 to guard against division-by-zero or numerical blowups).
+  - Scales `annual_rain_mean`:
+    `scaled_annual_rain_mean = stored_annual_rain_mean * rainfall_anomaly_ratio`
+  - All other 25 terrain features remain unmutated.
+
+Step 3: Model Execution & Probability Extraction
+  - Feature row is assembled into a `(1, 26)` float32 array.
+  - `model.predict_proba(row)` is executed.
+  - `flood_probability = proba_array[0, 1]` (positive flood class probability).
+
+Step 4: Three-Tier Classification
+  - `if flood_probability >= 0.70`           -> `RiskTier.HIGH`
+  - `elif flood_probability >= 0.557` (opt)   -> `RiskTier.MEDIUM`
+  - `else`                                   -> `RiskTier.LOW`
+  *CRITICAL NOTE: The ML model NEVER directly emits `RiskTier.DANGER`!*
+
+Step 5: Explainability (SHAP TreeExplainer)
+  - If enabled, `shap.TreeExplainer` evaluates feature attributions on the positive class.
+  - Extracts the names of the top 2 features with highest positive SHAP values.
+  - Stored in `risk_assessments.top_contributing_features` (e.g. `["annual_rain_mean", "elevation"]`).
+
+Step 6: Cascading River Basin Escalation (`EscalationEngine`)
+  - Flood water flows strictly downstream: Kalam -> Bahrain -> Madyan -> Mingora.
+  - `EscalationEngine` represents zones as a Directed Acyclic Graph (DAG).
+  - Runs Kahn's algorithm for topological sorting in O(V + E) time.
+  - If an upstream zone is in `HIGH` or `DANGER` tier:
+    - Downstream zone risk is escalated:
+      - `LOW` becomes `MEDIUM`
+      - `MEDIUM` becomes `HIGH`
+      - `HIGH` becomes `DANGER`
+    - Probability receives an upward boost (+0.08, capped at 0.995).
+    - Explanation string appends: "Escalated due to heavy rain/high risk in Kalam (HIGH)."
+
+--------------------------------------------------------------------------------
+6.4 STATIC FEATURE GROUND TRUTH VALUES (SWAT 4 ZONES)
+--------------------------------------------------------------------------------
+From `backend/models/Swat_4Zones_Static_Features_FINAL.csv`:
+
+Metric                   | Kalam      | Bahrain    | Madyan     | Mingora
+-------------------------|------------|------------|------------|------------
+elevation (m)            | 2061.32    | 1470.06    | 1475.12    | 929.86
+slope (deg)              | 5.55       | 9.89       | 12.02      | 4.95
+stream_proximity (m)     | 587.85     | 319.34     | 362.91     | 309.40
+drainage_density         | 50.22      | 51.33      | 39.41      | 47.66
+upstream_area (sq km)    | 0.0489     | 0.2943     | 0.0070     | 0.0493
+hand (m)                 | 86.60      | 63.90      | 57.50      | 6.50
+landcover raw code       | 60.0       | 50.0       | 10.0       | 50.0
+ndvi                     | 0.327      | 0.194      | 0.665      | 0.060
+annual_rain_mean (mm)    | 506.57     | 718.28     | 771.88     | 865.81
+rainfall_std (mm)        | 90.24      | 123.42     | 129.98     | 130.63
+rainfall_max_anomaly     | 1.28       | 1.34       | 1.37       | 1.26
+terrain_ruggedness       | 11435.0    | 14533.7    | 17731.1    | 4606.5
+latitude                 | 35.4877    | 35.2064    | 35.1406    | 34.7717
+longitude                | 72.5791    | 72.5435    | 72.5575    | 72.3597
+
+================================================================================
+7. MOBILE APPLICATION ARCHITECTURE (FLUTTER)
+================================================================================
+
+The mobile app is a cross-platform Flutter application (tested primarily for Android)
+targeted at local residents, field volunteers, and emergency responders.
+
+Key Architectural Characteristics:
+  1. Service Locator Pattern: Uses `GetIt` (`sl`) configured in `service_locator.dart`
+     to inject `ApiClient`, `StorageService`, `LocationService`, and `RiverGraph`.
+  2. DSA - Client-Side Graph Analysis:
+     Implements `RiverGraph` (`lib/core/dsa/river_graph.dart`). When the app loads zone
+     states, `RiverGraph` builds the upstream DAG in memory. It provides methods:
+     - `getUpstreamChain(zoneId)`: Walks upstream ancestors to headwaters.
+     - `getDownstreamSuccessors(zoneId)`: BFS traversal of all downstream communities.
+     - `checkCascadingSurge(zoneId)`: Instantly alerts the user if an upstream zone has surged.
+  3. DSA - Geospatial Spatial Indexing:
+     Implements `SpatialIndex` (`lib/core/dsa/spatial_index.dart`) using the Haversine formula
+     to determine the user's nearest zone from GPS coordinates and sort zones by proximity.
+  4. Dynamic API Configuration:
+     `settings_screen.dart` and `api_constants.dart` allow switching backend targets on the fly:
+     - `http://127.0.0.1:8000/api` (via `adb reverse tcp:8000 tcp:8000` for physical USB phones)
+     - `http://10.0.2.2:8000/api` (Android Studio Emulator)
+     - `http://192.168.x.x:8000/api` (Local Wi-Fi network)
+  5. 5-Tab Navigation Layout (`MainNavigationScreen`):
+     - Tab 0: Overview (Nearest zone card, cascading surge banner, risk summary chips)
+     - Tab 1: River Map (FlutterMap with OSM tiles, color-coded risk markers, tap popups)
+     - Tab 2: Alerts (Emergency alert feed, siren/vibration trigger on DANGER)
+     - Tab 3: Reports (Citizen submission form with GPS coordinates + recent report list)
+     - Tab 4: Relief (Emergency relief depot inventory: sandbags, boats, first-aid kits)
+
+================================================================================
+8. WEB PORTAL ARCHITECTURE (NEXT.JS 15)
+================================================================================
+
+The web portal provides a dashboard for authorities, NDMA/PDMA disaster officials, 
+and the public.
+
+Key Architectural Characteristics:
+  1. Next.js 15 App Router + React 19:
+     Server components combined with interactive client components (`'use client'`).
+  2. Interactive GIS Mapping (`ZoneMap.tsx`):
+     - Uses Leaflet with custom tiles.
+     - Plots actual PostGIS coordinates for Kalam, Bahrain, Madyan, and Mingora.
+     - Draws blue directed polyline paths visualizing river flow between connected zones.
+     - Markers pulse with animated CSS rings if a zone enters `HIGH` or `DANGER`.
+  3. Analytical Visualizations:
+     - `RiskTrendChart.tsx`: Renders 24-hour historical risk trajectory.
+     - `RainfallVsRiskChart.tsx`: Dual-axis line/bar chart displaying the exact correlation 
+       between millimeter precipitation and AI flood probability.
+  4. Red Alert State Broadcast (`RedAlertProvider.tsx`):
+     - Global React context monitoring the entire river basin.
+     - If any zone reaches `DANGER` tier, the entire dashboard flashes an emergency 
+       red header with sound effects and banner instructions.
+  5. Admin Command Center (`AdminDashboard.tsx`):
+     - Manual Threat Overrides: Ability to force a zone's displayed threat level with reason.
+     - Citizen Report Moderation: Review, approve, or reject crowdsourced reports.
+     - User Management: Create operator logins, reset passwords, delete users.
+     - Emergency Broadcast Tool: Dispatch CAP-compliant alerts across the network.
+
+================================================================================
+9. DEPLOYMENT, CONTAINERIZATION & OPERATIONS
+================================================================================
+
+The entire project runs in isolated Docker containers via Docker Compose.
+
+Containers in `docker-compose.yml`:
+  1. `postgres`: `postgis/postgis:16-3.4-alpine` (Internal port 5432)
+     Persistent volume: `swat_postgis_data`
+  2. `redis`: `redis:7.2-alpine` (Internal port 6379)
+  3. `backend`: Built from `./Dockerfile` (Target `base`)
+     Exposes host port `8000:8000`. Runs entrypoint script.
+  4. `web`: Built from `./web/Dockerfile`
+     Exposes host port `3000:3000`.
+  5. `tests`: Built from `./Dockerfile` (Target `dev` with pytest, ruff, mypy).
+
+Container Startup Sequence (`backend/entrypoint.sh`):
+  1. `alembic upgrade head`: Runs any pending database schema migrations.
+  2. `python backend/scripts/load_zone_terrain_features.py`: Loads the 26 static 
+     features into `zone_terrain_features` if not already present.
+  3. `python backend/scripts/seed_demo_data.py`: Seeds baseline zones, thresholds, 
+     admin account (`admin` / `admin123`), and initial sensor readings.
+  4. Starts Uvicorn server on `0.0.0.0:8000`.
+
+Starting the stack:
+  ```bash
+  docker compose up --build -d
+  ```
+  Or simply double-click `start_project.bat` on Windows.
+
+================================================================================
+10. DEVELOPER GUIDE: HOW TO REPLACE OR UPGRADE THE ML MODEL
+================================================================================
+
+When your teammate provides a new or updated machine learning model, follow this 
+comprehensive checklist to ensure zero downtime and prevent pipeline failures:
+
+--------------------------------------------------------------------------------
+10.1 Required Artifacts from the ML Training Phase
+--------------------------------------------------------------------------------
+The training pipeline must export the following files to `backend/models/`:
+  1. `swat_flood_model.joblib`: The trained model object (must implement `.predict_proba()`).
+  2. `swat_feature_columns.joblib`: Python list of feature names in the exact order 
+     expected by the model.
+  3. `swat_landcover_encoder.joblib`: Scikit-learn encoder transforming land cover classes.
+  4. `swat_optimal_threshold.joblib`: Float value representing the optimal decision threshold.
+
+--------------------------------------------------------------------------------
+10.2 If the Model Keeps the SAME 26 Features:
+--------------------------------------------------------------------------------
+  1. Replace the `.joblib` files inside `backend/models/`.
+  2. Run the verification script:
+     ```bash
+     python backend/scripts/verify_ml_artifacts.py
+     ```
+     This tests that the encoder transforms land cover strings and that 
+     `model.predict_proba()` produces valid probabilities.
+  3. Restart the backend container:
+     ```bash
+     docker compose restart backend
+     ```
+
+--------------------------------------------------------------------------------
+10.3 If the New Model Adds, Removes, or Changes Feature Names:
+--------------------------------------------------------------------------------
+Step 1: Update Database Schema
+  - Create a new Alembic migration:
+    ```bash
+    docker compose exec backend alembic revision -m "update_ml_feature_columns"
+    ```
+  - Modify `backend/src/infrastructure/db/models.py` in `ZoneTerrainFeaturesModel` 
+    to add/remove the corresponding SQLAlchemy column definitions.
+  - Apply migration:
+    ```bash
+    docker compose exec backend alembic upgrade head
+    ```
+
+Step 2: Update Static Feature Loader
+  - Modify `backend/scripts/load_zone_terrain_features.py`:
+    - Update `_build_feature_dict()` to map CSV columns to the new feature dictionary.
+  - Re-run the script:
+    ```bash
+    python backend/scripts/load_zone_terrain_features.py
+    ```
+
+Step 3: Update Inference Assembly
+  - In `backend/src/infrastructure/ml/predictor.py`:
+    - Review `_build_feature_row()` to ensure dynamic scaling (like `annual_rain_mean` 
+      or any new weather variables) correctly populates the array in `feature_columns` order.
+
+Step 4: Verify SHAP Explainability
+  - If using SHAP, ensure the new model is compatible with `shap.TreeExplainer` 
+    (for tree models like XGBoost/LightGBM/CatBoost) or `shap.LinearExplainer` / 
+    `shap.KernelExplainer` for other architectures in `backend/src/infrastructure/ml/artifacts.py`.
+
+Step 5: Run Batch Refresh Test
+  - Run the batch prediction script to verify end-to-end database writing:
+    ```bash
+    python backend/scripts/refresh_risk_assessments.py
+    ```
+  - Verify that the web dashboard (`http://localhost:3000`) and mobile app reflect 
+    the new risk assessments immediately.
+
+================================================================================
+END OF REPORT
+================================================================================

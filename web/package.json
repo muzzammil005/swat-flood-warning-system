@@ -1,0 +1,36 @@
+{
+  "name": "swat-flood-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "generate-api": "openapi --input ../backend/openapi.json --output ./src/api/generated --client fetch"
+  },
+  "dependencies": {
+    "@types/leaflet": "^1.9.22",
+    "chart.js": "^4.5.1",
+    "framer-motion": "^13.1.1",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^1.34.0",
+    "react": "^19.2.8",
+    "react-chartjs-2": "^5.3.1",
+    "react-dom": "^19.2.8",
+    "react-hot-toast": "^2.6.0",
+    "react-leaflet": "^4.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "autoprefixer": "^10.4.0",
+    "next": "^16.3.1",
+    "openapi-typescript-codegen": "^0.31.0",
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.3.0",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,1819 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Swat Flood Early-Warning System API",
+    "description": "MVP demo backend - temporary implementation for university evaluation",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/zones/summary": {
+      "get": {
+        "tags": [
+          "zones"
+        ],
+        "summary": "Get Zone Summary",
+        "description": "Get a high-level summary of all zones and their current risk tiers.",
+        "operationId": "get_zone_summary_api_zones_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoneSummaryResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/zones/": {
+      "get": {
+        "tags": [
+          "zones"
+        ],
+        "summary": "Get Zones",
+        "description": "Get all zones with their most recent risk assessment, thresholds, and sensor health.\nZones with active manual overrides will show the override's threat_level instead of computed tier.",
+        "operationId": "get_zones_api_zones__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ZoneListResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Get Zones Api Zones  Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/zones": {
+      "get": {
+        "tags": [
+          "zones"
+        ],
+        "summary": "Get Zones",
+        "description": "Get all zones with their most recent risk assessment, thresholds, and sensor health.\nZones with active manual overrides will show the override's threat_level instead of computed tier.",
+        "operationId": "get_zones_api_zones_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ZoneListResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Get Zones Api Zones Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/zones/nearest": {
+      "get": {
+        "tags": [
+          "zones"
+        ],
+        "summary": "Get Nearest Zone",
+        "description": "Find the nearest zone to given coordinates using PostGIS.\n\nUsed for mobile geolocation.\n\nTODO: Move to use-cases layer, add proper error handling.",
+        "operationId": "get_nearest_zone_api_zones_nearest_get",
+        "parameters": [
+          {
+            "name": "lat",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "title": "Lat"
+            }
+          },
+          {
+            "name": "lon",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "number",
+              "title": "Lon"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Nearest Zone Api Zones Nearest Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/zones/{zone_id}": {
+      "get": {
+        "tags": [
+          "zones"
+        ],
+        "summary": "Get Zone",
+        "description": "Get detailed information for a specific zone.",
+        "operationId": "get_zone_api_zones__zone_id__get",
+        "parameters": [
+          {
+            "name": "zone_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Zone Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoneDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/zones/{zone_id}/risk-trend": {
+      "get": {
+        "tags": [
+          "zones"
+        ],
+        "summary": "Get Zone Risk Trend",
+        "description": "Get time-ordered list of risk assessments within the requested window.\n\nUsed for dashboard's risk-trend chart.\n\nTODO: Move to use-cases layer, add proper error handling.",
+        "operationId": "get_zone_risk_trend_api_zones__zone_id__risk_trend_get",
+        "parameters": [
+          {
+            "name": "zone_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Zone Id"
+            }
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "24h",
+              "title": "Window"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response Get Zone Risk Trend Api Zones  Zone Id  Risk Trend Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/zones/{zone_id}/rainfall-vs-risk": {
+      "get": {
+        "tags": [
+          "zones"
+        ],
+        "summary": "Get Zone Rainfall Vs Risk",
+        "description": "Get paired time-ordered list of rainfall and risk data within the requested window.\n\nUsed for dashboard's rainfall-vs-risk chart.\n\nTODO: Move to use-cases layer, add proper error handling.",
+        "operationId": "get_zone_rainfall_vs_risk_api_zones__zone_id__rainfall_vs_risk_get",
+        "parameters": [
+          {
+            "name": "zone_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Zone Id"
+            }
+          },
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "24h",
+              "title": "Window"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response Get Zone Rainfall Vs Risk Api Zones  Zone Id  Rainfall Vs Risk Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/alerts/": {
+      "get": {
+        "tags": [
+          "alerts"
+        ],
+        "summary": "Get Alerts",
+        "description": "Get most recent 20 alerts across all zones, newest first.",
+        "operationId": "get_alerts_api_alerts__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AlertListResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Get Alerts Api Alerts  Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/alerts": {
+      "get": {
+        "tags": [
+          "alerts"
+        ],
+        "summary": "Get Alerts",
+        "description": "Get most recent 20 alerts across all zones, newest first.",
+        "operationId": "get_alerts_api_alerts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AlertListResponse"
+                  },
+                  "type": "array",
+                  "title": "Response Get Alerts Api Alerts Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/": {
+      "post": {
+        "tags": [
+          "community-reports"
+        ],
+        "summary": "Submit Report",
+        "description": "Submit a community report.\n\nAccepts either zone_id or lat/lon coordinates.\nIf coordinates provided, finds nearest zone.\n\nTODO: Add auth, move to use-cases layer, add proper error handling.",
+        "operationId": "submit_report_api_reports__post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommunityReportCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityReportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "community-reports"
+        ],
+        "summary": "Get Reports",
+        "description": "Get community reports with composable optional filtering.\n\nFilters compose: ``status=approved&zone_id=X`` returns approved reports in X.\nNo filters returns all reports (unbounded \u2014 caller should paginate in future).\n\nUsed for moderation list and official view.\n\nTODO: Add auth, move to use-cases layer, add proper error handling, add pagination.",
+        "operationId": "get_reports_api_reports__get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "zone_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Zone Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityReportListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports": {
+      "post": {
+        "tags": [
+          "community-reports"
+        ],
+        "summary": "Submit Report",
+        "description": "Submit a community report.\n\nAccepts either zone_id or lat/lon coordinates.\nIf coordinates provided, finds nearest zone.\n\nTODO: Add auth, move to use-cases layer, add proper error handling.",
+        "operationId": "submit_report_api_reports_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommunityReportCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityReportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "community-reports"
+        ],
+        "summary": "Get Reports",
+        "description": "Get community reports with composable optional filtering.\n\nFilters compose: ``status=approved&zone_id=X`` returns approved reports in X.\nNo filters returns all reports (unbounded \u2014 caller should paginate in future).\n\nUsed for moderation list and official view.\n\nTODO: Add auth, move to use-cases layer, add proper error handling, add pagination.",
+        "operationId": "get_reports_api_reports_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "zone_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Zone Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityReportListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/{report_id}": {
+      "patch": {
+        "tags": [
+          "community-reports"
+        ],
+        "summary": "Update Report Status",
+        "description": "Approve or reject a pending report.\n\nRequires admin JWT.",
+        "operationId": "update_report_status_api_reports__report_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommunityReportUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommunityReportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login",
+        "description": "Login endpoint for issuing JWT tokens.",
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/overrides": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Create Manual Override",
+        "description": "Force a zone's displayed risk tier.\n\nThe most-recent override for a zone is treated as 'active'.\nRequires admin JWT.",
+        "operationId": "create_manual_override_api_admin_overrides_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverrideRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Create Manual Override Api Admin Overrides Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Overrides",
+        "description": "List manual overrides for a zone, most recent first.\n\nRequires admin JWT.",
+        "operationId": "list_overrides_api_admin_overrides_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "zone_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Zone Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "title": "Response List Overrides Api Admin Overrides Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/resource-centers": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Resource Centers",
+        "description": "Return all resource centers with their inventory.\n\nPublic endpoint \u2014 used by the 'Active Relief Centers' dashboard panel.\nNo auth required.",
+        "operationId": "get_resource_centers_api_resource_centers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response Get Resource Centers Api Resource Centers Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Users",
+        "description": "List all users without password_hash.\n\nRequires admin JWT.",
+        "operationId": "list_users_api_admin_users_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response List Users Api Admin Users Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Create User",
+        "description": "Create a new operator account.\n\nRejects duplicate usernames with HTTP 400.\nRequires admin JWT.",
+        "operationId": "create_user_api_admin_users_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Create User Api Admin Users Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "description": "Healthcheck endpoint for the backend service.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Root",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Root  Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AlertListResponse": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "zone_id": {
+            "type": "string",
+            "title": "Zone Id"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "certainty": {
+            "type": "string",
+            "title": "Certainty"
+          },
+          "urgency": {
+            "type": "string",
+            "title": "Urgency"
+          },
+          "headline": {
+            "type": "string",
+            "title": "Headline"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "sent_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Sent At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "zone_id",
+          "severity",
+          "certainty",
+          "urgency",
+          "headline",
+          "description",
+          "sent_at"
+        ],
+        "title": "AlertListResponse",
+        "description": "Alert list item response schema."
+      },
+      "CommunityReportCreateRequest": {
+        "properties": {
+          "report_type": {
+            "type": "string",
+            "title": "Report Type",
+            "description": "Type of report: flooding, blocked_drain, high_river_level, etc."
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Detailed description of the issue"
+          },
+          "reporter_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reporter Name",
+            "description": "Optional reporter name"
+          },
+          "reporter_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reporter Phone",
+            "description": "Optional reporter phone number"
+          },
+          "zone_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zone Id",
+            "description": "Zone ID (if known)"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude",
+            "description": "Latitude coordinate (if zone_id not provided)"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude",
+            "description": "Longitude coordinate (if zone_id not provided)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "report_type",
+          "description"
+        ],
+        "title": "CommunityReportCreateRequest",
+        "description": "Request schema for submitting a community report.",
+        "example": {
+          "description": "Water level rising rapidly near bridge",
+          "latitude": 35.1234,
+          "longitude": 72.5678,
+          "report_type": "flooding",
+          "reporter_name": "John Doe",
+          "reporter_phone": "+1234567890"
+        }
+      },
+      "CommunityReportListResponse": {
+        "properties": {
+          "reports": {
+            "items": {
+              "$ref": "#/components/schemas/CommunityReportResponse"
+            },
+            "type": "array",
+            "title": "Reports"
+          },
+          "reports_by_zone": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "items": {
+                    "$ref": "#/components/schemas/CommunityReportResponse"
+                  },
+                  "type": "array"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reports By Zone"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reports"
+        ],
+        "title": "CommunityReportListResponse",
+        "description": "Response schema for list of community reports."
+      },
+      "CommunityReportResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "zone_id": {
+            "type": "string",
+            "title": "Zone Id"
+          },
+          "report_type": {
+            "type": "string",
+            "title": "Report Type"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "reporter_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reporter Name"
+          },
+          "reporter_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reporter Phone"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Submitted At"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "admin_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "zone_id",
+          "report_type",
+          "description",
+          "submitted_at",
+          "status"
+        ],
+        "title": "CommunityReportResponse",
+        "description": "Response schema for a community report."
+      },
+      "CommunityReportUpdateRequest": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "New status: Approved or Rejected"
+          },
+          "admin_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Notes",
+            "description": "Optional admin notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "CommunityReportUpdateRequest",
+        "description": "Request schema for updating a report status.",
+        "example": {
+          "admin_notes": "Verified with local authorities",
+          "status": "Approved"
+        }
+      },
+      "CoordinatesSchema": {
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "title": "Longitude"
+          }
+        },
+        "type": "object",
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "title": "CoordinatesSchema",
+        "description": "Coordinates schema for HTTP response."
+      },
+      "CreateUserRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "responder"
+            ],
+            "title": "Role",
+            "default": "responder"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "CreateUserRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthStatus": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "service": {
+            "type": "string",
+            "title": "Service"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "service",
+          "version",
+          "timestamp"
+        ],
+        "title": "HealthStatus"
+      },
+      "LoginRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "description": "Request schema for login.",
+        "example": {
+          "password": "admin123",
+          "username": "admin"
+        }
+      },
+      "LoginResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "token_type",
+          "user_id",
+          "username",
+          "role"
+        ],
+        "title": "LoginResponse",
+        "description": "Response schema for successful login.",
+        "example": {
+          "access_token": "eyJhbGciOiJIUzI1NiIs...",
+          "role": "admin",
+          "token_type": "bearer",
+          "user_id": "user_123",
+          "username": "admin"
+        }
+      },
+      "OverrideRequest": {
+        "properties": {
+          "zone_id": {
+            "type": "string",
+            "title": "Zone Id"
+          },
+          "threat_level": {
+            "type": "string",
+            "title": "Threat Level"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "zone_id",
+          "threat_level",
+          "reason"
+        ],
+        "title": "OverrideRequest"
+      },
+      "RainfallWindowSchema": {
+        "properties": {
+          "millimetres": {
+            "type": "number",
+            "title": "Millimetres"
+          },
+          "duration_hours": {
+            "type": "number",
+            "title": "Duration Hours"
+          }
+        },
+        "type": "object",
+        "required": [
+          "millimetres",
+          "duration_hours"
+        ],
+        "title": "RainfallWindowSchema",
+        "description": "Rainfall window schema for HTTP response."
+      },
+      "RiskAssessmentSchema": {
+        "properties": {
+          "tier": {
+            "type": "string",
+            "title": "Tier",
+            "description": "The risk tier (SAFE, LOW, MEDIUM, HIGH, DANGER)."
+          },
+          "probability": {
+            "type": "number",
+            "title": "Probability",
+            "description": "Confidence score [0, 1] of the assessment."
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation",
+            "description": "Human-readable explanation of the risk."
+          },
+          "computed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Computed At",
+            "description": "When this assessment was generated."
+          },
+          "combined_rain_mm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Combined Rain Mm",
+            "description": "Combined 10-day rainfall (past 7d + forecast 72h)."
+          },
+          "expected_rain_mm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Rain Mm",
+            "description": "Expected 10-day baseline rainfall."
+          },
+          "rainfall_anomaly_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rainfall Anomaly Ratio",
+            "description": "Ratio of actual vs expected rainfall."
+          },
+          "top_contributing_features": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Contributing Features",
+            "description": "Top SHAP contributing features from the ML model."
+          }
+        },
+        "type": "object",
+        "required": [
+          "tier",
+          "probability",
+          "explanation",
+          "computed_at"
+        ],
+        "title": "RiskAssessmentSchema",
+        "description": "API schema for a zone risk assessment."
+      },
+      "RiskTier": {
+        "type": "integer",
+        "enum": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "title": "RiskTier",
+        "description": "Ordered flood-risk tiers used by every downstream consumer.\n\nIntEnum gives us a natural ordering (``RiskTier.HIGH > RiskTier.MEDIUM``)\n*and* lets us serialise the value as a plain integer for storage/API\npurposes without writing a custom codec. The ordering itself encodes the\nsingle-hop escalation semantics used by :class:`EscalationEngine`:\nincrementing by one level moves to the next tier, and ``DANGER`` is the\nhard cap."
+      },
+      "SensorReadingSchema": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "zone_id": {
+            "type": "string",
+            "title": "Zone Id"
+          },
+          "water_level": {
+            "$ref": "#/components/schemas/WaterLevelSchema"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "zone_id",
+          "water_level",
+          "source",
+          "timestamp"
+        ],
+        "title": "SensorReadingSchema",
+        "description": "Sensor reading schema for HTTP response."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "WaterLevelSchema": {
+        "properties": {
+          "metres": {
+            "type": "number",
+            "title": "Metres"
+          }
+        },
+        "type": "object",
+        "required": [
+          "metres"
+        ],
+        "title": "WaterLevelSchema",
+        "description": "Water level schema for HTTP response."
+      },
+      "WeatherSnapshotSchema": {
+        "properties": {
+          "zone_id": {
+            "type": "string",
+            "title": "Zone Id"
+          },
+          "rainfall": {
+            "$ref": "#/components/schemas/RainfallWindowSchema"
+          },
+          "fetched_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Fetched At"
+          },
+          "ttl_seconds": {
+            "type": "integer",
+            "title": "Ttl Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "zone_id",
+          "rainfall",
+          "fetched_at",
+          "ttl_seconds"
+        ],
+        "title": "WeatherSnapshotSchema",
+        "description": "Weather snapshot schema for HTTP response."
+      },
+      "ZoneDetailResponse": {
+        "properties": {
+          "zone": {
+            "$ref": "#/components/schemas/ZoneListResponse"
+          },
+          "recent_readings": {
+            "items": {
+              "$ref": "#/components/schemas/SensorReadingSchema"
+            },
+            "type": "array",
+            "title": "Recent Readings"
+          },
+          "risk_history": {
+            "items": {
+              "$ref": "#/components/schemas/RiskAssessmentSchema"
+            },
+            "type": "array",
+            "title": "Risk History"
+          },
+          "recent_rainfall": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WeatherSnapshotSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "latest_sensor_reading": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SensorReadingSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "is_manual_override": {
+            "type": "boolean",
+            "title": "Is Manual Override",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "zone",
+          "recent_readings",
+          "risk_history"
+        ],
+        "title": "ZoneDetailResponse",
+        "description": "Zone detail response schema."
+      },
+      "ZoneListResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "coordinates": {
+            "$ref": "#/components/schemas/CoordinatesSchema"
+          },
+          "upstream_zone_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upstream Zone Id"
+          },
+          "latest_assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskAssessmentSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "thresholds": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ZoneThresholdsSchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sensor_health": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sensor Health"
+          },
+          "is_manual_override": {
+            "type": "boolean",
+            "title": "Is Manual Override",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "coordinates"
+        ],
+        "title": "ZoneListResponse",
+        "description": "Zone list item response schema."
+      },
+      "ZoneSummaryResponse": {
+        "properties": {
+          "danger": {
+            "type": "integer",
+            "title": "Danger"
+          },
+          "high": {
+            "type": "integer",
+            "title": "High"
+          },
+          "medium": {
+            "type": "integer",
+            "title": "Medium"
+          },
+          "low": {
+            "type": "integer",
+            "title": "Low"
+          },
+          "safe": {
+            "type": "integer",
+            "title": "Safe"
+          },
+          "total_zones": {
+            "type": "integer",
+            "title": "Total Zones"
+          }
+        },
+        "type": "object",
+        "required": [
+          "danger",
+          "high",
+          "medium",
+          "low",
+          "safe",
+          "total_zones"
+        ],
+        "title": "ZoneSummaryResponse",
+        "description": "Zone summary counts by risk tier."
+      },
+      "ZoneThresholdsSchema": {
+        "properties": {
+          "water_warning_level": {
+            "$ref": "#/components/schemas/WaterLevelSchema"
+          },
+          "water_critical_level": {
+            "$ref": "#/components/schemas/WaterLevelSchema"
+          },
+          "heavy_rain_threshold_mm": {
+            "type": "number",
+            "title": "Heavy Rain Threshold Mm"
+          }
+        },
+        "type": "object",
+        "required": [
+          "water_warning_level",
+          "water_critical_level",
+          "heavy_rain_threshold_mm"
+        ],
+        "title": "ZoneThresholdsSchema",
+        "description": "Zone thresholds schema for HTTP response."
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}
