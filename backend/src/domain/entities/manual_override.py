@@ -4,11 +4,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from domain.exceptions import DomainError
+from domain.value_objects.risk_tier import RiskTier
 
 if TYPE_CHECKING:
     from datetime import datetime
-
-    from domain.value_objects import RiskTier
 
 
 @dataclass
@@ -29,19 +28,20 @@ class ManualOverride:
     timestamp: datetime
 
     def __post_init__(self) -> None:
-        if hasattr(self.threat_level, "value") and not isinstance(self.threat_level, RiskTier):
-            from domain.value_objects.risk_tier import RiskTier
-            tier_val = self.threat_level.value
-            if isinstance(tier_val, str):
-                self.threat_level = RiskTier[tier_val.upper()]
+        if not isinstance(self.threat_level, RiskTier):
+            if hasattr(self.threat_level, "name"):
+                name = str(self.threat_level.name).upper()
+            elif hasattr(self.threat_level, "value"):
+                name = str(self.threat_level.value).upper()
             else:
-                self.threat_level = RiskTier(tier_val)
-        elif hasattr(self.threat_level, "name") and not isinstance(self.threat_level, RiskTier):
-            from domain.value_objects.risk_tier import RiskTier
-            self.threat_level = RiskTier[self.threat_level.name.upper()]
-        elif isinstance(self.threat_level, str):
-            from domain.value_objects.risk_tier import RiskTier
-            self.threat_level = RiskTier[self.threat_level.upper()]
+                name = str(self.threat_level).upper()
+
+            if name in RiskTier.__members__:
+                self.threat_level = RiskTier[name]
+            elif name in ("1", "2", "3", "4"):
+                self.threat_level = RiskTier(int(name))
+            else:
+                self.threat_level = RiskTier.HIGH
 
         if not self.reason:
             raise DomainError("ManualOverride.reason must be non-empty — auditable trail required")

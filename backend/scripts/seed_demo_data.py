@@ -17,8 +17,15 @@ from __future__ import annotations
 
 import asyncio
 import random
+import sys
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Optional
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_SRC_DIR = _PROJECT_ROOT / "backend" / "src"
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
 
 from sqlalchemy.ext.asyncio import AsyncSession
 

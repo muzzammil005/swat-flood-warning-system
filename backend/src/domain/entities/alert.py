@@ -4,11 +4,10 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from domain.exceptions import DomainError
+from domain.value_objects.risk_tier import RiskTier
 
 if TYPE_CHECKING:
     from datetime import datetime
-
-    from domain.value_objects import RiskTier
 
 
 @dataclass
@@ -32,19 +31,20 @@ class Alert:
     sent_at: datetime
 
     def __post_init__(self) -> None:
-        if hasattr(self.severity, "value") and not isinstance(self.severity, RiskTier):
-            from domain.value_objects.risk_tier import RiskTier
-            sev_val = self.severity.value
-            if isinstance(sev_val, str):
-                self.severity = RiskTier[sev_val.upper()]
+        if not isinstance(self.severity, RiskTier):
+            if hasattr(self.severity, "name"):
+                name = str(self.severity.name).upper()
+            elif hasattr(self.severity, "value"):
+                name = str(self.severity.value).upper()
             else:
-                self.severity = RiskTier(sev_val)
-        elif hasattr(self.severity, "name") and not isinstance(self.severity, RiskTier):
-            from domain.value_objects.risk_tier import RiskTier
-            self.severity = RiskTier[self.severity.name.upper()]
-        elif isinstance(self.severity, str):
-            from domain.value_objects.risk_tier import RiskTier
-            self.severity = RiskTier[self.severity.upper()]
+                name = str(self.severity).upper()
+
+            if name in RiskTier.__members__:
+                self.severity = RiskTier[name]
+            elif name in ("1", "2", "3", "4"):
+                self.severity = RiskTier(int(name))
+            else:
+                self.severity = RiskTier.HIGH
 
         if not self.headline:
             raise DomainError("Alert.headline must be non-empty")
