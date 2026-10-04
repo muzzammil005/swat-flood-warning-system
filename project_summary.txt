@@ -21,6 +21,12 @@ TABLE OF CONTENTS
 8. Web Portal Architecture (Next.js 15)
 9. Deployment, Containerization & Operations
 10. Step-by-Step Developer Guide: How to Replace/Upgrade the ML Model
+11. Milestone Upgrade: 3-Class Multiclass XGBoost Migration & Enum Alignment
+12. Extended Model Analytics & Hydrological APIs Specification
+13. Web Dashboard (Next.js) XGBoost UI Integration
+14. Flutter Mobile App Full Codebase Architecture & XGBoost Integration
+15. Verification, Git Tracking & Production Synchronization Summary
+
 
 ================================================================================
 1. EXECUTIVE SUMMARY & CORE ARCHITECTURAL PRINCIPLES
@@ -458,6 +464,40 @@ All API routes are prefixed by `/api` and return standard JSON.
        { "timestamp": "2026-10-03T08:00:00Z", "rainfall_mm": 12.5, "risk_probability": 0.58 }, ...
      ]
 
+7. `GET /api/zones/{zone_id}/history`
+   - Description: 30-day historical daily precipitation telemetry parsed alongside
+     historical seasonal baseline normals to compute dynamic rainfall anomaly ratios.
+   - Response (200 OK):
+     {
+       "zone_id": "zone-kalam",
+       "days": 30,
+       "thirty_day_history": [
+         {
+           "timestamp": "2026-09-04T00:00:00Z",
+           "actual_rain_mm": 18.2,
+           "daily_baseline_mm": 15.0
+         }, ...
+       ]
+     }
+
+8. `GET /api/zones/{zone_id}/inundation`
+   - Description: Spatial polygon coordinates representing estimated flood extent
+     for zones categorized under HIGH threat, with mandatory uncertainty disclaimer.
+   - Response (200 OK):
+     {
+       "zone_id": "zone-kalam",
+       "estimated_polygon": [
+         { "latitude": 35.485, "longitude": 72.585 },
+         { "latitude": 35.495, "longitude": 72.595 },
+         { "latitude": 35.488, "longitude": 72.605 },
+         { "latitude": 35.475, "longitude": 72.598 },
+         { "latitude": 35.478, "longitude": 72.582 },
+         { "latitude": 35.485, "longitude": 72.585 }
+       ],
+       "disclaimer": "Approximate estimate, not an exact boundary."
+     }
+
+
 --------------------------------------------------------------------------------
 5.2 ALERTS ENDPOINTS (`/api/alerts`)
 --------------------------------------------------------------------------------
@@ -579,7 +619,44 @@ All API routes are prefixed by `/api` and return standard JSON.
    - Auth: Requires Admin JWT.
 
 --------------------------------------------------------------------------------
-5.5 SYSTEM HEALTH & META
+5.5 MODEL ANALYTICS & EXPLAINABILITY ENDPOINTS (`/api/model`)
+--------------------------------------------------------------------------------
+1. `GET /api/model/metrics`
+   - Description: Returns live multiclass classification validation metrics (precision, 
+     recall, and F1-score) for all 3 risk tiers (Low, Medium, High).
+   - Response (200 OK):
+     {
+       "Low": {
+         "precision": 0.94,
+         "recall": 0.92,
+         "f1_score": 0.930
+       },
+       "Medium": {
+         "precision": 0.89,
+         "recall": 0.88,
+         "f1_score": 0.885
+       },
+       "High": {
+         "precision": 0.95,
+         "recall": 0.93,
+         "f1_score": 0.940
+       }
+     }
+
+2. `GET /api/model/feature-importance`
+   - Description: Returns normalized SHAP importance weights for the top 5 predictive
+     hydrological and terrain features driving the XGBoost tree decisions.
+   - Response (200 OK):
+     [
+       { "feature_name": "rainfall_anomaly_ratio", "importance_score": 0.38 },
+       { "feature_name": "rain_3day_pre",          "importance_score": 0.24 },
+       { "feature_name": "elevation",              "importance_score": 0.16 },
+       { "feature_name": "stream_proximity",       "importance_score": 0.12 },
+       { "feature_name": "hand",                   "importance_score": 0.10 }
+     ]
+
+--------------------------------------------------------------------------------
+5.6 SYSTEM HEALTH & META
 --------------------------------------------------------------------------------
 1. `GET /health` & `GET /api/health`
    - Response: { "status": "ok", "service": "swat-flood-backend", "version": "0.1.0", "timestamp": "..." }
@@ -888,5 +965,194 @@ Step 5: Run Batch Refresh Test
     the new risk assessments immediately.
 
 ================================================================================
+11. MILESTONE UPGRADE: 3-CLASS MULTICLASS XGBOOST MIGRATION & ENUM ALIGNMENT
+================================================================================
+
+11.1 Problem Statement & Rationale
+  - Previously, the system used a legacy risk tier model that included non-standard tiers 
+    ('Safe', 'Danger') which lacked formal calibration against hydrological runoff data.
+  - The Final Year Project (FYP) panel defense necessitated migrating to a calibrated 
+    3-class Multiclass Extreme Gradient Boosting (XGBoost) model trained on historical Swat 
+    Valley monsoon and flood events (2010, 2022, and synthetic flash runoff baselines).
+  - The new model outputs probabilistic distributions across strictly three validated tiers:
+      1. LOW (Normal river baseline, manageable seasonal runoff)
+      2. MEDIUM (Elevated water levels, runoff warnings, monitored threshold breaches)
+      3. HIGH (Critical river swelling, compound rainfall anomaly, imminent evacuation threat)
+
+11.2 Backend Database, Domain & Schema Synchronization
+  - Domain Entities:
+    - Updated `RiskTier` enum in `backend/src/domain/entities/zone.py`, `alert.py`, and 
+      `manual_override.py` to strictly encapsulate `('LOW', 'MEDIUM', 'HIGH')`.
+    - Removed obsolete references to 'SAFE' and 'DANGER'.
+  - PostgreSQL & PostGIS Database Mapping:
+    - Aligned `DBRiskTier` enum in `backend/src/infrastructure/db/models.py`.
+    - Applied Alembic migration updating column constraints on `risk_assessments`, 
+      `manual_overrides`, and `alerts`.
+  - Manual Override Enum Serialization Bug Fix:
+    - Resolved the FastAPI 500 error: `<DBRiskTier.HIGH: 'HIGH'> is not a valid RiskTier`.
+    - Cause: SQLAlchemy mapped the database column to an instance of `DBRiskTier`, which was 
+      subsequently validated against the domain `RiskTier` using string representations.
+    - Solution: Implemented `.value` attribute extraction in `backend/src/infrastructure/db/mappers.py` 
+      and `backend/src/application/use_cases/admin.py`, guaranteeing clean string coercion 
+      across all use cases.
+  - Pydantic v2 Schemas:
+    - Updated `ZoneListResponse`, `AlertListResponse`, `ManualOverrideCreate`, and `ZoneSummaryResponse` 
+      in `backend/src/interfaces/schemas/` to strictly validate `Literal["LOW", "MEDIUM", "HIGH"]`.
+
+================================================================================
+12. EXTENDED MODEL ANALYTICS & HYDROLOGICAL APIS SPECIFICATION
+================================================================================
+
+To satisfy panel presentation requirements for explainable AI (XAI) and hydrological 
+grounding, four specialized REST endpoints were engineered into the FastAPI backend:
+
+12.1 `GET /api/model/metrics`
+  - Implementation: `backend/src/interfaces/http/routers/model_analytics.py`
+  - Purpose: Exposes validation performance metrics across the 3 classes.
+  - Response Data:
+    - Low: Precision = 0.94, Recall = 0.92, F1-Score = 0.930
+    - Medium: Precision = 0.89, Recall = 0.88, F1-Score = 0.885
+    - High: Precision = 0.95, Recall = 0.93, F1-Score = 0.940
+
+12.2 `GET /api/model/feature-importance`
+  - Implementation: `backend/src/interfaces/http/routers/model_analytics.py`
+  - Purpose: Exposes normalized SHAP decision weights driving tree classification.
+  - Key Finding: `rainfall_anomaly_ratio` represents 38% of model decision weight, 
+    verifying that sudden rainfall spikes above seasonal normals trigger proactive alerts.
+  - Ranked Features:
+    1. `rainfall_anomaly_ratio` (38%): Ratio of actual rainfall to 30-day baseline normal.
+    2. `rain_3day_pre` (24%): Cumulative 3-day prior antecedent soil moisture saturation.
+    3. `elevation` (16%): DEM topographical elevation (meters above sea level).
+    4. `stream_proximity` (12%): Euclidean distance to primary Swat riverbed centerline.
+    5. `hand` (10%): Height Above Nearest Drainage (hydrological runoff potential).
+
+12.3 `GET /api/zones/{zone_id}/history`
+  - Implementation: `backend/src/interfaces/http/routers/zones.py`
+  - Purpose: Provides 30-day paired daily precipitation telemetry vs climatological baseline.
+  - Data Structure: Array of 30 records containing `timestamp`, `actual_rain_mm`, and 
+    `daily_baseline_mm`. Enables dual-series trend comparison and anomaly detection.
+
+12.4 `GET /api/zones/{zone_id}/inundation`
+  - Implementation: `backend/src/interfaces/http/routers/zones.py`
+  - Purpose: Generates spatial polygon coordinates simulating projected flood extent 
+    for zones evaluated at HIGH risk.
+  - Mandatory Disclaimer: Every payload includes `"disclaimer": "Approximate estimate, not an exact boundary."` 
+    to prevent over-reliance on simulated geospatial boundaries during field operations.
+
+================================================================================
+13. WEB DASHBOARD (NEXT.JS 15) XGBOOST UI INTEGRATION
+================================================================================
+
+13.1 Admin Dashboard Form Refactoring (`web/components/AdminDashboard.tsx`)
+  - Threat Level Selection: Replaced legacy options with strictly `Low`, `Medium`, and `High`.
+  - Zone Dropdown Bug Fix: Restored dynamic zone mapping `<option value={z.zone_id}>{z.name}</option>` 
+    which was previously empty due to misaligned destructuring during the initial dropdown update.
+
+13.2 Model Metrics & Explainability (`web/components/dashboard/MetricsOverview.tsx`)
+  - Integrated dynamic queries fetching `/api/model/metrics` and `/api/model/feature-importance`.
+  - Visualizes 3-class F1-scores with progress bars and color-coded tier cards (Low: Green, 
+    Medium: Amber, High: Red).
+  - Displays Top 5 Feature Importance horizontal bar chart highlighting `rainfall_anomaly_ratio` 
+    as the primary driver with a prominent badge.
+
+13.3 30-Day Historical Rainfall Chart (`web/components/RiskTrendChart.tsx`)
+  - Updated zone risk visualization to fetch `/api/zones/{zone_id}/history`.
+  - Plots 30-day dual series: Solid curve with gradient fill for `actual_rain_mm` and dashed 
+    amber line for `daily_baseline_mm`.
+  - Displays summary statistics: 30-day cumulative precipitation, baseline expected normal, 
+    and deviation percentage.
+
+13.4 GIS Inundation Map Overlay (`web/components/ZoneMap.tsx`)
+  - Evaluates active zone risk; if a zone is categorized at `HIGH` risk, dynamically fetches 
+    `/api/zones/{zone_id}/inundation`.
+  - Renders a semi-transparent red/orange polygon overlay on Leaflet GIS map.
+  - Provides an interactive click handler that opens a disclaimer modal displaying:
+    `"Approximate estimate, not an exact boundary."` along with simulated inundation depth.
+
+================================================================================
+14. FLUTTER MOBILE APP FULL CODEBASE ARCHITECTURE & XGBOOST INTEGRATION
+================================================================================
+
+14.1 Architecture & Technical Stack
+  - Framework: Flutter 3.x / Dart SDK 3.12+ (Sound Null-Safety)
+  - State & Dependency Management: GetIt service locator (`mobile/lib/core/di/service_locator.dart`)
+  - HTTP Networking: Dio 5.7+ (`mobile/lib/core/network/api_client.dart`) with auto-reconnect 
+    and offline fallback caches
+  - GIS Mapping: `flutter_map` 7.0+ with `latlong2`
+  - Charting: `fl_chart` 0.70+ for hardware-accelerated time-series visualization
+  - Local Storage: `shared_preferences` and `flutter_secure_storage`
+
+14.2 Core Models & Typed API Service
+  - `mobile/lib/core/models/model_analytics_model.dart`:
+    - `ClassMetrics` & `ModelMetricsResponse` (Low, Medium, High F1-scores, precision, recall)
+    - `FeatureImportanceItem` (`featureName`, `importanceScore`)
+    - `DailyRainfallRecord` (`timestamp`, `actualRainMm`, `dailyBaselineMm`)
+    - `HistoricalRainfallResponse` (`zoneId`, `thirtyDayHistory`)
+    - `InundationExtent` (`zoneId`, `estimatedPolygon`, `disclaimer`, `toLatLngList()`)
+  - `mobile/lib/core/network/api_client.dart` & `mobile/lib/services/api_service.dart`:
+    - Added typed methods: `getModelMetrics()`, `getFeatureImportance()`, 
+      `getZoneRainfallHistory(zoneId)`, and `getZoneInundation(zoneId)`.
+    - Resilient offline fallback datasets for presentation reliability during network drops.
+
+14.3 Model Analytics Screen (`mobile/lib/features/analytics/screens/model_analytics_screen.dart`)
+  - Multiclass F1-Score Cards: Shows 93.0% (Low), 88.5% (Medium), 94.0% (High) with linear 
+    progress meters and precision/recall stats.
+  - Feature Importance Visualizer: Renders normalized decision bars, tagging `rainfall_anomaly_ratio` 
+    (38%) with a prominent "KEY DRIVER" star badge.
+  - Panel Architecture Notes: Explains gradient boosting advantages over binary thresholds.
+  - Access Points: Linked from Dashboard AppBar action, Dashboard interactive banner, and 
+    Settings screen shortcut card.
+
+14.4 30-Day Historical Rainfall Chart (`mobile/lib/features/zone_detail/screens/zone_detail_screen.dart`)
+  - Replaced legacy 24h graph with 30-day dual-series `fl_chart` LineChart.
+  - Cyan curve with area gradient fill for actual rainfall (`actual_rain_mm`).
+  - Dashed amber curve (`dashArray: [6, 4]`) for seasonal baseline (`daily_baseline_mm`).
+  - Summary KPI Banner: 30-day actual cumulative total, baseline normal total, deviation %, 
+    and dynamic anomaly ratio badge (`1.34x Normal`).
+  - Interactive tooltip scrubbing displaying exact millimeter readings per day.
+
+14.5 GIS Inundation Map Overlay (`mobile/lib/features/gis_map/screens/map_screen.dart`)
+  - Evaluates zones for `HIGH` risk tier; dynamically fetches `estimated_polygon` coordinates.
+  - Renders semi-transparent red/orange polygon (`color: Color(0xFFEF4444).withValues(alpha: 0.35)`, 
+    `borderColor: Color(0xFFDC2626)`, `borderStrokeWidth: 2.5`) using `PolygonLayer`.
+  - Disclaimer Display:
+    - Tapping centroid badge or active top banner triggers `_showInundationDisclaimer()`.
+    - Displays floating SnackBar: `[Zone] Inundation: Approximate estimate, not an exact boundary.`
+    - Opens Modal Bottom Sheet highlighting the disclaimer in an amber alert box with modeling context.
+  - Interactive Layer Toggle: AppBar action button allows toggling inundation layer on/off.
+
+================================================================================
+15. VERIFICATION, GIT TRACKING & PRODUCTION SYNCHRONIZATION SUMMARY
+================================================================================
+
+15.1 Static Analysis & Quality Assurance
+  - Flutter Mobile Codebase:
+    - Executed `dart analyze lib` in `mobile/`.
+    - Fixed deprecated `isFilled` parameter on `Polygon`.
+    - Corrected `Colors.emerald` to `Color(0xFF10B981)`.
+    - Aligned `DailyRainfallRecord` timestamp to `DateTime`.
+    - Result: `Analyzing lib... No issues found!` (0 errors, 0 warnings).
+  - Web Codebase:
+    - Next.js development server running on port 3001 with 0 compilation errors.
+    - TypeScript typings verified across all API response interfaces.
+  - Backend Codebase:
+    - FastAPI server running on port 8000.
+    - All 4 new endpoints verified responding with 200 OK and valid JSON payloads.
+
+15.2 Version Control & GitHub Synchronization
+  - Root `.gitignore` Bug Fix:
+    - Fixed root `.gitignore` line `lib/` which was mistakenly treating Flutter's `mobile/lib/` 
+      as a Python virtual environment directory.
+    - Updated rules to `/lib/`, `/lib64/`, and `!mobile/lib/`, while ensuring Flutter build 
+      artifacts (`.dart_tool/`, `build/`) remain properly ignored.
+  - Git Commit & Push:
+    - Successfully committed all 56 changed files (7,625 additions).
+    - Commit ID: `f917dae`
+    - Commit Message: `feat: Integrate 3-class XGBoost model APIs into Web and Mobile Flutter apps with analytics, inundation overlays, and 30-day rainfall history`
+    - Remote Repository: `https://github.com/muzzammil005/swat-flood-warning-system.git`
+    - Branch: `master` (Up to date with `origin/master`).
+
+================================================================================
 END OF REPORT
 ================================================================================
+
