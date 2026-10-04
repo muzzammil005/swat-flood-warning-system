@@ -2,7 +2,7 @@
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
-export type RiskTier = 'LOW' | 'MEDIUM' | 'HIGH' | 'DANGER' | 'SAFE';
+export type RiskTier = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export interface Coordinates {
   latitude: number;
@@ -53,17 +53,19 @@ export interface WeatherSnapshot {
 }
 
 export interface ZoneSummaryResponse {
-  danger: number;
+  danger?: number;
   high: number;
   medium: number;
   low: number;
-  safe: number;
+  safe?: number;
   total_zones: number;
 }
 
 export interface ZoneListResponse {
   id: string;
+  zone_id?: string;
   name: string;
+  zone_name?: string;
   coordinates: Coordinates;
   upstream_zone_id?: string;
   latest_assessment?: RiskAssessment;
@@ -137,7 +139,7 @@ export interface ReportListResponse {
 
 export interface AdminOverrideRequest {
   zone_id: string;
-  threat_level: 'LOW' | 'MEDIUM' | 'HIGH' | 'DANGER';
+  threat_level: RiskTier;
   reason: string;
 }
 
@@ -154,6 +156,38 @@ export interface LoginResponse {
   user_id: string;
   username: string;
   role: string;
+}
+
+export interface ClassMetrics {
+  precision: number;
+  recall: number;
+  f1_score: number;
+}
+
+export type ModelMetricsResponse = Record<string, ClassMetrics>;
+
+export interface FeatureImportanceItem {
+  feature_name: string;
+  importance_score: number;
+}
+
+export type FeatureImportanceResponse = FeatureImportanceItem[];
+
+export interface DailyRainfallRecord {
+  timestamp: string;
+  actual_rain_mm: number;
+  daily_baseline_mm: number;
+}
+
+export interface HistoricalRainfallResponse {
+  zone_id: string;
+  thirty_day_history: DailyRainfallRecord[];
+}
+
+export interface InundationExtentResponse {
+  zone_id: string;
+  estimated_polygon: Coordinates[];
+  disclaimer: string;
 }
 
 export interface AlertResponse {
@@ -260,6 +294,22 @@ class ApiClient {
 
   async getZoneRainfallVsRisk(zoneId: string, window: '24h' | '48h' = '24h'): Promise<RainfallVsRiskPoint[]> {
     return this.fetch(`/zones/${zoneId}/rainfall-vs-risk?window=${window}`);
+  }
+
+  async getZoneRainfallHistory(zoneId: string): Promise<HistoricalRainfallResponse> {
+    return this.fetch(`/zones/${zoneId}/history`);
+  }
+
+  async getZoneInundation(zoneId: string): Promise<InundationExtentResponse> {
+    return this.fetch(`/zones/${zoneId}/inundation`);
+  }
+
+  async getModelMetrics(): Promise<ModelMetricsResponse> {
+    return this.fetch('/model/metrics');
+  }
+
+  async getFeatureImportance(): Promise<FeatureImportanceResponse> {
+    return this.fetch('/model/feature-importance');
   }
 
   async getNearestZone(latitude: number, longitude: number): Promise<{ zone_id: string; zone_name: string; coordinates: { latitude: number; longitude: number }; distance_meters: number; zone_details: { name: string; coordinates: { latitude: number; longitude: number }; upstream_zone_id?: string | null } }> {

@@ -13,8 +13,10 @@
  * hard cap.
  */
 export enum RiskTier {
+    LOW = 'LOW',
+    MEDIUM = 'MEDIUM',
+    HIGH = 'HIGH',
     '_1' = 1,
     '_2' = 2,
     '_3' = 3,
-    '_4' = 4,
 }

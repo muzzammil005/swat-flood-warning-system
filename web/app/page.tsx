@@ -95,9 +95,9 @@ export default function Home() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-[325px]">
             <div className="rounded-xl border border-white/60 bg-white/70 backdrop-blur-md p-4 shadow-sm flex flex-col">
-              <h3 className="font-semibold text-slate-800 mb-2">Risk Trend</h3>
+              <h3 className="font-semibold text-slate-800 mb-2">Rainfall History & Risk Dynamics</h3>
               <div className="flex-1 min-h-0">
-                <RiskTrendChart data={riskTrendData} zoneName={zoneName} />
+                <RiskTrendChart data={riskTrendData} zoneName={zoneName} zoneId={selectedZone} />
               </div>
             </div>
             <div className="rounded-xl border border-white/60 bg-white/70 backdrop-blur-md p-4 shadow-sm flex flex-col">

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
 import uuid
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from application.use_cases.alerts import AlertUseCases
 from infrastructure.db.repositories import AlertRepositoryImpl
@@ -29,9 +29,26 @@ async def get_alerts() -> list[AlertListResponse]:
 
 class BroadcastRequest(BaseModel):
     zone_id: str
-    severity: str = "DANGER"
+    severity: str = "HIGH"
     headline: str
     description: str
+
+    @field_validator("severity", mode="before")
+    @classmethod
+    def validate_severity(cls, value: object) -> str:
+        if hasattr(value, "value"):
+            val_str = str(value.value)
+        elif hasattr(value, "name"):
+            val_str = str(value.name)
+        else:
+            val_str = str(value)
+        val_upper = val_str.upper()
+        if val_upper not in ("LOW", "MEDIUM", "HIGH"):
+            if val_upper == "DANGER":
+                return "HIGH"
+            raise ValueError(f"Invalid severity '{val_str}'. Must be one of: LOW, MEDIUM, HIGH")
+        return val_upper
+
 
 @router.post("/broadcast", response_model=AlertListResponse)
 async def broadcast_alert(request: BroadcastRequest) -> AlertListResponse:
@@ -39,10 +56,14 @@ async def broadcast_alert(request: BroadcastRequest) -> AlertListResponse:
     from domain.entities.alert import Alert
     from domain.value_objects import RiskTier
     
+    sev_str = request.severity.value if hasattr(request.severity, "value") else str(request.severity)
+    sev_str = sev_str.upper()
+    sev_tier = RiskTier[sev_str] if sev_str in RiskTier.__members__ else RiskTier.HIGH
+
     # Create the domain entity
     alert = Alert(
         zone_id=request.zone_id,
-        severity=RiskTier[request.severity],
+        severity=sev_tier,
         certainty="Observed",
         urgency="Immediate",
         headline=request.headline,

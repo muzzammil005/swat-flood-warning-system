@@ -109,24 +109,58 @@ def _enum_name_to_domain(
     db_enum_member: object,
     domain_enum_cls: type[T],
 ) -> T:
-    """Map a DB native-enum member → a domain enum member via shared ``.name``."""
-    name = getattr(db_enum_member, "name", None)
-    if name is None:  # pragma: no cover — defensive
-        raise TypeError(f"Expected a DB enum instance, got {type(db_enum_member)!r}")
-    result = getattr(domain_enum_cls, name)
-    return cast("T", result)
+    """Map a DB native-enum member → a domain enum member via shared ``.name`` or ``.value``."""
+    if hasattr(db_enum_member, "name"):
+        name = str(db_enum_member.name).upper()
+    elif hasattr(db_enum_member, "value") and isinstance(db_enum_member.value, str):
+        name = str(db_enum_member.value).upper()
+    elif isinstance(db_enum_member, str):
+        name = db_enum_member.upper()
+    elif isinstance(db_enum_member, int):
+        return domain_enum_cls(db_enum_member)
+    else:
+        name = getattr(db_enum_member, "name", None)
+        if name is None:  # pragma: no cover — defensive
+            raise TypeError(f"Expected a DB enum instance, got {type(db_enum_member)!r}")
+        name = str(name).upper()
+
+    if hasattr(domain_enum_cls, name):
+        return cast("T", getattr(domain_enum_cls, name))
+    if name in getattr(domain_enum_cls, "__members__", {}):
+        return cast("T", domain_enum_cls[name])
+    try:
+        return domain_enum_cls(name)
+    except (ValueError, TypeError):
+        pass
+    raise TypeError(f"Cannot map {db_enum_member!r} to domain enum {domain_enum_cls}")
 
 
 def _domain_enum_to_db(
     domain_enum_member: object,
     db_enum_cls: type[T],
 ) -> T:
-    """Map a domain enum member → DB native-enum member via shared ``.name``."""
-    name = getattr(domain_enum_member, "name", None)
-    if name is None:  # pragma: no cover — defensive
-        raise TypeError(f"Expected a domain enum instance, got {type(domain_enum_member)!r}")
-    result = getattr(db_enum_cls, name)
-    return cast("T", result)
+    """Map a domain enum member → DB native-enum member via shared ``.name`` or ``.value``."""
+    if hasattr(domain_enum_member, "name"):
+        name = str(domain_enum_member.name).upper()
+    elif hasattr(domain_enum_member, "value") and isinstance(domain_enum_member.value, str):
+        name = str(domain_enum_member.value).upper()
+    elif isinstance(domain_enum_member, str):
+        name = domain_enum_member.upper()
+    else:
+        name = getattr(domain_enum_member, "name", None)
+        if name is None:  # pragma: no cover — defensive
+            raise TypeError(f"Expected a domain enum instance, got {type(domain_enum_member)!r}")
+        name = str(name).upper()
+
+    if hasattr(db_enum_cls, name):
+        return cast("T", getattr(db_enum_cls, name))
+    if name in getattr(db_enum_cls, "__members__", {}):
+        return cast("T", db_enum_cls[name])
+    try:
+        return db_enum_cls(name)
+    except (ValueError, TypeError):
+        pass
+    raise TypeError(f"Cannot map {domain_enum_member!r} to DB enum {db_enum_cls}")
 
 
 def _coords_to_wkb(coordinates: Coordinates) -> WKTElement:

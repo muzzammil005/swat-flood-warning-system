@@ -23,7 +23,7 @@ class UserAlreadyExistsError(DomainError):
 
 class InvalidRiskTierError(DomainError):
     def __init__(self, tier_name: str):
-        super().__init__(f"Invalid threat_level '{tier_name}'. Must be one of: LOW, MEDIUM, HIGH, DANGER")
+        super().__init__(f"Invalid threat_level '{tier_name}'. Must be one of: LOW, MEDIUM, HIGH")
 
 
 class AdminUseCases:
@@ -42,13 +42,23 @@ class AdminUseCases:
         self.session = session_maker
 
     async def create_manual_override(
-        self, zone_id: str, threat_level: str, reason: str, admin_username: str
+        self, zone_id: str, threat_level: str | RiskTier | object, reason: str, admin_username: str
     ) -> ManualOverride:
         """Force a zone's displayed risk tier and log the action."""
+        if hasattr(threat_level, "value") and isinstance(threat_level.value, str):
+            tier_name = threat_level.value.upper()
+        elif hasattr(threat_level, "name"):
+            tier_name = threat_level.name.upper()
+        else:
+            tier_name = str(threat_level).upper()
+
         try:
-            tier = RiskTier[threat_level.upper()]
-        except KeyError as e:
-            raise InvalidRiskTierError(threat_level) from e
+            if tier_name not in ("LOW", "MEDIUM", "HIGH"):
+                raise KeyError(tier_name)
+            tier = RiskTier[tier_name]
+        except (KeyError, ValueError) as e:
+            raw_display = threat_level.value if hasattr(threat_level, "value") else (threat_level.name if hasattr(threat_level, "name") else str(threat_level))
+            raise InvalidRiskTierError(str(raw_display)) from e
 
         override = ManualOverride(
             id=f"override-{uuid.uuid4()}",
@@ -76,6 +86,7 @@ class AdminUseCases:
         # We might need to fetch directly from repo since it might not have list_for_zone
         from sqlalchemy import select
         from infrastructure.db.models import ManualOverrideModel
+        from infrastructure.db.mappers import manual_override_to_domain
 
         stmt = select(ManualOverrideModel).order_by(ManualOverrideModel.timestamp.desc())
         if zone_id:
@@ -84,17 +95,7 @@ class AdminUseCases:
         result = await self.session.execute(stmt)
         rows = result.scalars().all()
         
-        return [
-            ManualOverride(
-                id=row.id,
-                zone_id=row.zone_id,
-                threat_level=RiskTier(row.threat_level),
-                reason=row.reason,
-                admin_username=row.admin_username,
-                timestamp=row.timestamp,
-            )
-            for row in rows
-        ]
+        return [manual_override_to_domain(row) for row in rows]
 
     async def create_user(
         self, username: str, password: str, role: str

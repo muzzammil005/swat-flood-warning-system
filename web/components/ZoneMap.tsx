@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, LayersControl } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, LayersControl, Polygon } from 'react-leaflet';
 import { Icon, DivIcon, LatLng } from 'leaflet';
 import { Map, LocateFixed } from 'lucide-react';
-import { ZoneListResponse, RiskTier, apiClient } from '@/shared/api';
+import { ZoneListResponse, RiskTier, apiClient, InundationExtentResponse } from '@/shared/api';
 import { Button } from '@/shared/ui';
 
 interface ZoneMapProps {
@@ -33,11 +33,9 @@ const createRiskIcon = (tier: RiskTier): Icon => {
   // Direct color mapping - ensure these match Tailwind config
   let color: string;
   switch (tier) {
-    case 'DANGER': color = '#ef4444'; break;    // risk-danger
     case 'HIGH': color = '#f97316'; break;      // risk-high
     case 'MEDIUM': color = '#f59e0b'; break;    // risk-medium
     case 'LOW': color = '#10b981'; break;       // risk-low
-    case 'SAFE': color = '#a3a3a3'; break;      // neutral-400
     default:
       console.warn(`Unknown risk tier: ${tier}, defaulting to gray`);
       color = '#a3a3a3';
@@ -285,6 +283,45 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({ zones, selectedZoneId, onZoneS
   }, []);
 
   const selectedZone = zones.find(z => z.id === selectedZoneId) || null;
+  const [inundations, setInundations] = useState<Record<string, InundationExtentResponse>>({});
+
+  useEffect(() => {
+    let isMounted = true;
+    const highRiskZones = zones.filter((z) => {
+      const tier = (z.latest_assessment?.tier as RiskTier) || 'LOW';
+      return tier === 'HIGH';
+    });
+
+    if (highRiskZones.length === 0) {
+      setInundations({});
+      return;
+    }
+
+    async function loadInundations() {
+      const results: Record<string, InundationExtentResponse> = {};
+      await Promise.all(
+        highRiskZones.map(async (zone) => {
+          try {
+            const data = await apiClient.getZoneInundation(zone.id);
+            if (data?.estimated_polygon && data.estimated_polygon.length > 0) {
+              results[zone.id] = data;
+            }
+          } catch (err) {
+            console.warn(`Failed to fetch inundation extent for zone ${zone.id}:`, err);
+          }
+        })
+      );
+      if (isMounted) {
+        setInundations(results);
+      }
+    }
+
+    void loadInundations();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [zones]);
 
   if (!isClient) {
     return (
@@ -335,11 +372,50 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({ zones, selectedZoneId, onZoneS
           {/* Location controls and user marker */}
           <LocationControls onZoneSelect={onZoneSelect} />
 
+          {/* Inundation Flood Extent Polygons for HIGH-risk zones */}
+          {Object.entries(inundations).map(([zoneId, inundation]) => {
+            const zone = zones.find(z => z.id === zoneId);
+            const positions: [number, number][] = inundation.estimated_polygon.map((coord) => [
+              coord.latitude,
+              coord.longitude,
+            ]);
+
+            return (
+              <Polygon
+                key={`inundation-${zoneId}`}
+                positions={positions}
+                pathOptions={{
+                  color: '#ea580c',
+                  weight: 2,
+                  fillColor: '#f97316',
+                  fillOpacity: 0.35,
+                  dashArray: '5, 5',
+                }}
+              >
+                <Popup>
+                  <div className="p-2 text-sm max-w-xs">
+                    <div className="flex items-center gap-1.5 mb-1.5 text-red-600 font-bold">
+                      <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse"></span>
+                      <span>Flood Inundation Extent</span>
+                    </div>
+                    <p className="font-semibold text-neutral-900 mb-1">
+                      {zone?.name || zoneId} (HIGH Risk)
+                    </p>
+                    <div className="mt-2 text-xs text-amber-800 bg-amber-50 p-2 rounded border border-amber-200">
+                      <span className="font-semibold">Disclaimer: </span>
+                      {inundation.disclaimer || 'Approximate estimate, not an exact boundary.'}
+                    </div>
+                  </div>
+                </Popup>
+              </Polygon>
+            );
+          })}
+
           {/* Zone markers */}
           {zones.map((zone) => {
             if (!zone.coordinates) return null;
 
-            const riskTier = zone.latest_assessment?.tier || 'SAFE';
+            const riskTier = (zone.latest_assessment?.tier as RiskTier) || 'LOW';
             const icon = createRiskIcon(riskTier);
             const isSelected = zone.id === selectedZoneId;
 
@@ -362,10 +438,6 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({ zones, selectedZoneId, onZoneS
         <h4 className="font-medium text-neutral-900 mb-2 text-sm">Risk Tier Legend</h4>
         <div className="space-y-1">
           <div className="flex items-center">
-            <div className="w-3 h-3 rounded-full bg-risk-danger mr-2"></div>
-            <span className="text-xs">Danger</span>
-          </div>
-          <div className="flex items-center">
             <div className="w-3 h-3 rounded-full bg-risk-high mr-2"></div>
             <span className="text-xs">High</span>
           </div>
@@ -377,9 +449,9 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({ zones, selectedZoneId, onZoneS
             <div className="w-3 h-3 rounded-full bg-risk-low mr-2"></div>
             <span className="text-xs">Low</span>
           </div>
-          <div className="flex items-center">
-            <div className="w-3 h-3 rounded-full bg-neutral-400 mr-2"></div>
-            <span className="text-xs">Safe/Unknown</span>
+          <div className="flex items-center pt-1 mt-1 border-t border-neutral-100">
+            <div className="w-3.5 h-2.5 rounded-sm bg-orange-500/40 border border-orange-500 border-dashed mr-2"></div>
+            <span className="text-xs text-orange-800 font-medium">Inundation Extent (HIGH)</span>
           </div>
         </div>
         <div className="mt-3 pt-2 border-t border-neutral-200">
@@ -396,13 +468,11 @@ export const ZoneMap: React.FC<ZoneMapProps> = ({ zones, selectedZoneId, onZoneS
             <div>
               <h3 className="font-bold text-lg text-neutral-900">{selectedZone.name}</h3>
               <span className={`px-2.5 py-1 rounded-full text-xs font-bold inline-block mt-1 ${
-                (selectedZone.latest_assessment?.tier || 'SAFE') === 'DANGER' ? 'bg-risk-danger text-white' :
-                (selectedZone.latest_assessment?.tier || 'SAFE') === 'HIGH' ? 'bg-risk-high text-white' :
-                (selectedZone.latest_assessment?.tier || 'SAFE') === 'MEDIUM' ? 'bg-risk-medium text-white' :
-                (selectedZone.latest_assessment?.tier || 'SAFE') === 'LOW' ? 'bg-risk-low text-white' :
-                'bg-neutral-400 text-white'
+                (selectedZone.latest_assessment?.tier || 'LOW') === 'HIGH' ? 'bg-risk-high text-white' :
+                (selectedZone.latest_assessment?.tier || 'LOW') === 'MEDIUM' ? 'bg-risk-medium text-white' :
+                'bg-risk-low text-white'
               }`}>
-                {selectedZone.latest_assessment?.tier || 'SAFE'}
+                {selectedZone.latest_assessment?.tier || 'LOW'}
               </span>
             </div>
             <button 

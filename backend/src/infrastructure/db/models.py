@@ -73,7 +73,6 @@ class DBRiskTier(PyEnum):
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
-    DANGER = "DANGER"
 
 
 class DBSensorSource(PyEnum):

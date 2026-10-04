@@ -81,19 +81,23 @@ class ZoneUseCases:
             latest_assessment = await self.risk_repo.latest_for_zone(zone.id)
             
             if override:
-                tier_name = override.threat_level.name
+                t = override.threat_level
+                tier_name = t.name if hasattr(t, "name") else (t.value if hasattr(t, "value") else str(t))
+                tier_name = str(tier_name).upper()
                 if tier_name in counts:
                     counts[tier_name] += 1
                 else:
-                    counts["SAFE"] += 1
+                    counts["LOW"] += 1
             elif latest_assessment:
-                tier_name = latest_assessment.tier.name
+                t = latest_assessment.tier
+                tier_name = t.name if hasattr(t, "name") else (t.value if hasattr(t, "value") else str(t))
+                tier_name = str(tier_name).upper()
                 if tier_name in counts:
                     counts[tier_name] += 1
                 else:
-                    counts["SAFE"] += 1
+                    counts["LOW"] += 1
             else:
-                counts["SAFE"] += 1
+                counts["LOW"] += 1
         
         return ZoneSummary(
             danger=counts["DANGER"],

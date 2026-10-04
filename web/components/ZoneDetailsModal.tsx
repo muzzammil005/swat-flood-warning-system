@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ZonesService, type ZoneDetailResponse } from '@/src/api/generated';
+import { apiClient, type DailyRainfallRecord } from '@/shared/api';
 import { Button, Card, CardContent, CardHeader, CardTitle, Badge, Skeleton } from '@/shared/ui';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -13,6 +14,7 @@ interface ZoneDetailsModalProps {
 
 export function ZoneDetailsModal({ isOpen, onClose, zoneId }: ZoneDetailsModalProps) {
   const [data, setData] = useState<ZoneDetailResponse | null>(null);
+  const [rainfallHistory, setRainfallHistory] = useState<DailyRainfallRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,8 +26,13 @@ export function ZoneDetailsModal({ isOpen, onClose, zoneId }: ZoneDetailsModalPr
         .then(setData)
         .catch((err) => setError(err.message || 'Failed to load zone details'))
         .finally(() => setLoading(false));
+
+      apiClient.getZoneRainfallHistory(zoneId)
+        .then((res) => setRainfallHistory(res?.thirty_day_history || []))
+        .catch((err) => console.warn('Failed to load history in modal:', err));
     } else {
       setData(null);
+      setRainfallHistory([]);
     }
   }, [isOpen, zoneId]);
 
@@ -50,7 +57,7 @@ export function ZoneDetailsModal({ isOpen, onClose, zoneId }: ZoneDetailsModalPr
                   ) : data ? (
                     <>
                       {data.zone.name}
-                      <Badge tier={(data.zone.latest_assessment?.tier as any) || 'SAFE'} className="text-sm px-3 py-1" />
+                      <Badge tier={(data.zone.latest_assessment?.tier as any) || 'LOW'} className="text-sm px-3 py-1" />
                     </>
                   ) : (
                     'Zone Details'
@@ -133,6 +140,70 @@ export function ZoneDetailsModal({ isOpen, onClose, zoneId }: ZoneDetailsModalPr
                         )}
                       </div>
                     </div>
+
+                    {/* 30-Day Rainfall History Section */}
+                    {rainfallHistory.length > 0 && (() => {
+                      const totalActual = rainfallHistory.reduce((acc, r) => acc + r.actual_rain_mm, 0);
+                      const totalBaseline = rainfallHistory.reduce((acc, r) => acc + r.daily_baseline_mm, 0);
+                      const anomalyRatio = totalBaseline > 0 ? (totalActual / totalBaseline).toFixed(2) : '1.00';
+                      const recent7Days = rainfallHistory.slice(-7);
+
+                      return (
+                        <div className="space-y-3 pt-4 border-t border-neutral-200">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-lg font-semibold text-neutral-800">
+                              30-Day Historical Rainfall &amp; Baseline
+                            </h3>
+                            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                              Anomaly Ratio: {anomalyRatio}x
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200">
+                              <span className="text-xs font-medium text-neutral-500 uppercase">30-Day Total Rain</span>
+                              <p className="text-2xl font-bold text-blue-600 mt-1">{totalActual.toFixed(1)} mm</p>
+                            </div>
+                            <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200">
+                              <span className="text-xs font-medium text-neutral-500 uppercase">Baseline Expected</span>
+                              <p className="text-2xl font-bold text-amber-600 mt-1">{totalBaseline.toFixed(1)} mm</p>
+                            </div>
+                            <div className="p-4 rounded-xl bg-neutral-50 border border-neutral-200">
+                              <span className="text-xs font-medium text-neutral-500 uppercase">Daily Baseline Avg</span>
+                              <p className="text-2xl font-bold text-neutral-700 mt-1">
+                                {(rainfallHistory[0]?.daily_baseline_mm || 0).toFixed(2)} mm/day
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Last 7 Days Mini Breakdown */}
+                          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
+                              Recent 7-Day Precipitation vs Daily Baseline
+                            </h4>
+                            <div className="grid grid-cols-7 gap-2 text-center">
+                              {recent7Days.map((record, i) => {
+                                const d = new Date(record.timestamp);
+                                const isExcess = record.actual_rain_mm > record.daily_baseline_mm;
+                                return (
+                                  <div key={i} className="p-2 rounded-lg bg-white border border-slate-200 flex flex-col justify-between">
+                                    <span className="text-[10px] text-slate-500">
+                                      {d.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })}
+                                    </span>
+                                    <span className={`text-xs font-bold my-1 ${isExcess ? 'text-blue-600 font-extrabold' : 'text-slate-700'}`}>
+                                      {record.actual_rain_mm.toFixed(1)}m
+                                    </span>
+                                    <span className="text-[9px] text-slate-400">
+                                      base: {record.daily_baseline_mm.toFixed(1)}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </>
                 ) : null}
               </CardContent>

@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime  # noqa: TC003  (Pydantic V2 needs runtime for from_attributes=True)
 from typing import TYPE_CHECKING  # noqa: F401  (may be needed for future field types)
 
-from pydantic import BaseModel, ConfigDict, field_serializer
+from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 
 from domain.value_objects.risk_tier import (
     RiskTier,  # noqa: TC001  (Pydantic V2 needs runtime for from_attributes=True)
@@ -29,10 +29,29 @@ class AlertListResponse(BaseModel):
     
     model_config = ConfigDict(from_attributes=True)
     
+    @field_validator('severity', mode='before')
+    @classmethod
+    def validate_severity(cls, value: object) -> RiskTier:
+        if isinstance(value, RiskTier):
+            return value
+        if hasattr(value, 'name'):
+            val = str(value.name).upper()
+        elif hasattr(value, 'value'):
+            val = str(value.value).upper()
+        else:
+            val = str(value).upper()
+        if val in RiskTier.__members__:
+            return RiskTier[val]
+        return RiskTier.HIGH
+
     @field_serializer('severity')
-    def serialize_severity(self, value: RiskTier | str) -> str:
-        """Serialize RiskTier enum to its name string (e.g., DANGER, HIGH, MEDIUM, LOW)."""
-        return value.name if hasattr(value, 'name') else str(value)
+    def serialize_severity(self, value: RiskTier | str | object) -> str:
+        """Serialize RiskTier enum to its name string (LOW, MEDIUM, HIGH)."""
+        if hasattr(value, 'name'):
+            return value.name
+        if hasattr(value, 'value'):
+            return str(value.value)
+        return str(value)
     
     @classmethod
     def from_entity(cls, alert) -> AlertListResponse:

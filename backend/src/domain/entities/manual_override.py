@@ -29,6 +29,20 @@ class ManualOverride:
     timestamp: datetime
 
     def __post_init__(self) -> None:
+        if hasattr(self.threat_level, "value") and not isinstance(self.threat_level, RiskTier):
+            from domain.value_objects.risk_tier import RiskTier
+            tier_val = self.threat_level.value
+            if isinstance(tier_val, str):
+                self.threat_level = RiskTier[tier_val.upper()]
+            else:
+                self.threat_level = RiskTier(tier_val)
+        elif hasattr(self.threat_level, "name") and not isinstance(self.threat_level, RiskTier):
+            from domain.value_objects.risk_tier import RiskTier
+            self.threat_level = RiskTier[self.threat_level.name.upper()]
+        elif isinstance(self.threat_level, str):
+            from domain.value_objects.risk_tier import RiskTier
+            self.threat_level = RiskTier[self.threat_level.upper()]
+
         if not self.reason:
             raise DomainError("ManualOverride.reason must be non-empty — auditable trail required")
         if not self.admin_username:

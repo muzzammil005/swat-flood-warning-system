@@ -21,7 +21,7 @@ from domain.exceptions import DomainError, NotFoundError
 from infrastructure.config import get_settings
 
 from .rate_limiter import limiter
-from .routers import admin, alerts, auth, reports, zones
+from .routers import admin, alerts, auth, model_analytics, reports, zones
 
 
 class HealthStatus(BaseModel):
@@ -100,6 +100,7 @@ app.include_router(alerts.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
+app.include_router(model_analytics.router, prefix="/api/model")
 
 
 

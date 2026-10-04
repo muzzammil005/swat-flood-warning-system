@@ -32,6 +32,20 @@ class Alert:
     sent_at: datetime
 
     def __post_init__(self) -> None:
+        if hasattr(self.severity, "value") and not isinstance(self.severity, RiskTier):
+            from domain.value_objects.risk_tier import RiskTier
+            sev_val = self.severity.value
+            if isinstance(sev_val, str):
+                self.severity = RiskTier[sev_val.upper()]
+            else:
+                self.severity = RiskTier(sev_val)
+        elif hasattr(self.severity, "name") and not isinstance(self.severity, RiskTier):
+            from domain.value_objects.risk_tier import RiskTier
+            self.severity = RiskTier[self.severity.name.upper()]
+        elif isinstance(self.severity, str):
+            from domain.value_objects.risk_tier import RiskTier
+            self.severity = RiskTier[self.severity.upper()]
+
         if not self.headline:
             raise DomainError("Alert.headline must be non-empty")
         if not self.description:

@@ -66,9 +66,9 @@ export function RedAlertProvider({ children }: { children: React.ReactNode }) {
         const dismissed = getDismissedAlerts();
         if (dismissed.has(newest.id)) return;
 
-        // 4. Only trigger for DANGER/EXTREME severity.
+        // 4. Trigger for HIGH/DANGER/EXTREME severity.
         const severity = newest.severity?.toUpperCase();
-        if (severity !== 'DANGER' && severity !== 'EXTREME') return;
+        if (severity !== 'HIGH' && severity !== 'DANGER' && severity !== 'EXTREME') return;
 
         // 5. Check subscription preference.
         const isSubscribed = localStorage.getItem('alerts_subscribed') === 'true';

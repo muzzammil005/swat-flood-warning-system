@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from application.use_cases.admin import AdminUseCases, InvalidRiskTierError, UserAlreadyExistsError
@@ -36,8 +36,22 @@ router = APIRouter(tags=["admin"])
 
 class OverrideRequest(BaseModel):
     zone_id: str
-    threat_level: str   # LOW | MEDIUM | HIGH | DANGER
+    threat_level: str   # LOW | MEDIUM | HIGH
     reason: str
+
+    @field_validator("threat_level", mode="before")
+    @classmethod
+    def validate_threat_level(cls, value: object) -> str:
+        if hasattr(value, "value"):
+            val_str = str(value.value)
+        elif hasattr(value, "name"):
+            val_str = str(value.name)
+        else:
+            val_str = str(value)
+        val_upper = val_str.upper()
+        if val_upper not in ("LOW", "MEDIUM", "HIGH"):
+            raise ValueError(f"Invalid threat_level '{val_str}'. Must be one of: LOW, MEDIUM, HIGH")
+        return val_upper
 
 
 class CreateUserRequest(BaseModel):
@@ -83,10 +97,12 @@ async def create_manual_override(
             # Commit manually since use_cases.session is injected but not committed
             await use_cases.session.commit()
 
+            threat_str = saved.threat_level.name if hasattr(saved.threat_level, "name") else (saved.threat_level.value if hasattr(saved.threat_level, "value") else str(saved.threat_level))
+
             return {
                 "id": saved.id,
                 "zone_id": saved.zone_id,
-                "threat_level": saved.threat_level.name,
+                "threat_level": threat_str,
                 "reason": saved.reason,
                 "admin_username": saved.admin_username,
                 "timestamp": saved.timestamp.isoformat(),
@@ -144,7 +160,7 @@ async def list_overrides(
                     "id": o.id,
                     "zone_id": o.zone_id,
                     "zone_name": zone_names.get(o.zone_id, "Unknown Zone"),
-                    "threat_level": o.threat_level.name,
+                    "threat_level": o.threat_level.name if hasattr(o.threat_level, "name") else (o.threat_level.value if hasattr(o.threat_level, "value") else str(o.threat_level)),
                     "reason": o.reason,
                     "created_by_username": o.admin_username,
                     "created_at": o.timestamp.isoformat(),

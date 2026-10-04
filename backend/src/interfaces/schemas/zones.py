@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime  # noqa: TC003  (Pydantic V2 needs runtime for from_attributes=True)
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 from domain.value_objects.risk_tier import (
     RiskTier,  # noqa: TC001  (Pydantic V2 needs runtime for from_attributes=True)
@@ -29,6 +29,9 @@ class CoordinatesSchema(BaseModel):
     longitude: float
     
     model_config = ConfigDict(from_attributes=True)
+
+    def __getitem__(self, item: str) -> float:
+        return getattr(self, item)
     
     @classmethod
     def from_vo(cls, coordinates: Coordinates) -> CoordinatesSchema:
@@ -67,7 +70,7 @@ class ZoneThresholdsSchema(BaseModel):
 class RiskAssessmentSchema(BaseModel):
     """API schema for a zone risk assessment."""
 
-    tier: str = Field(..., description="The risk tier (SAFE, LOW, MEDIUM, HIGH, DANGER).")
+    tier: str = Field(..., description="The risk tier (LOW, MEDIUM, HIGH).")
     probability: float = Field(
         ..., description="Confidence score [0, 1] of the assessment."
     )
@@ -80,10 +83,30 @@ class RiskAssessmentSchema(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
     
+    @field_validator('tier', mode='before')
+    @classmethod
+    def validate_tier(cls, value: object) -> str:
+        if hasattr(value, 'name'):
+            val = str(value.name).upper()
+        elif hasattr(value, 'value'):
+            val = str(value.value).upper()
+        else:
+            val = str(value).upper()
+        if val not in ('LOW', 'MEDIUM', 'HIGH'):
+            if val in ('SAFE', 'UNKNOWN'):
+                return 'LOW'
+            elif val == 'DANGER':
+                return 'HIGH'
+        return val
+
     @field_serializer('tier')
-    def serialize_tier(self, value: RiskTier | str) -> str:
-        """Serialize RiskTier enum to its name string (e.g., DANGER, HIGH, MEDIUM, LOW)."""
-        return value.name if hasattr(value, 'name') else str(value)
+    def serialize_tier(self, value: RiskTier | str | object) -> str:
+        """Serialize RiskTier enum to its name string (LOW, MEDIUM, HIGH)."""
+        if hasattr(value, 'name'):
+            return value.name
+        if hasattr(value, 'value'):
+            return str(value.value)
+        return str(value)
 
 
 class SensorReadingSchema(BaseModel):
@@ -136,7 +159,9 @@ class ZoneSummaryResponse(BaseModel):
 class ZoneListResponse(BaseModel):
     """Zone list item response schema."""
     id: str
+    zone_id: str | None = None
     name: str
+    zone_name: str | None = None
     coordinates: CoordinatesSchema
     upstream_zone_id: str | None = None
     latest_assessment: RiskAssessmentSchema | None = None
@@ -157,7 +182,9 @@ class ZoneListResponse(BaseModel):
         
         return cls(
             id=zone.id,
+            zone_id=zone.id,
             name=zone.name,
+            zone_name=zone.name,
             coordinates=CoordinatesSchema.from_vo(zone.coordinates),
             upstream_zone_id=zone.upstream_zone_id,
             latest_assessment=(
@@ -178,6 +205,35 @@ class ZoneListResponse(BaseModel):
             sensor_health=sensor_health,
             is_manual_override=is_manual_override,
         )
+
+
+class InundationExtentResponse(BaseModel):
+    """Inundation extent response schema."""
+    zone_id: str
+    estimated_polygon: list[CoordinatesSchema]
+    disclaimer: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DailyRainfallRecordSchema(BaseModel):
+    """Daily rainfall historical record."""
+    timestamp: str
+    actual_rain_mm: float
+    daily_baseline_mm: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+    def __getitem__(self, item: str) -> str | float:
+        return getattr(self, item)
+
+
+class HistoricalRainfallResponse(BaseModel):
+    """Historical rainfall response schema for a zone."""
+    zone_id: str
+    thirty_day_history: list[DailyRainfallRecordSchema]
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ZoneDetailResponse(BaseModel):

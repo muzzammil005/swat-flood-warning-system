@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
-import { apiClient, clearAdminToken, getAdminToken, type CommunityReportResponse, type UserRecord, type ZoneListResponse, type AdminOverrideResponse } from '@/shared/api';
+import { apiClient, clearAdminToken, getAdminToken, type CommunityReportResponse, type UserRecord, type ZoneListResponse, type AdminOverrideResponse, type RiskTier } from '@/shared/api';
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from '@/shared/ui';
 
 export function AdminDashboard() {
@@ -16,7 +16,7 @@ export function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
   const [overrideZoneId, setOverrideZoneId] = useState('');
-  const [overrideLevel, setOverrideLevel] = useState('HIGH');
+  const [overrideLevel, setOverrideLevel] = useState<RiskTier>('HIGH');
   const [overrideReason, setOverrideReason] = useState('');
   const [newUser, setNewUser] = useState({ username: '', password: '', role: 'admin' as 'admin' | 'responder' });
   const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -70,22 +70,40 @@ export function AdminDashboard() {
 
   const loadData = async () => {
     try {
-      const [zonesData, allReportsData, usersData, overridesData] = await Promise.all([
+      const [zonesRes, reportsRes, usersRes, overridesRes] = await Promise.allSettled([
         apiClient.getZones(),
         apiClient.getReports(),
         apiClient.getUsers(),
         apiClient.getOverrides(),
       ]);
 
-      setZones(zonesData);
-      const allReports = allReportsData.reports ?? [];
-      setPendingReports(allReports.filter(r => r.status.toLowerCase() === 'pending'));
-      setResolvedReports(allReports.filter(r => r.status.toLowerCase() !== 'pending'));
-      setUsers(usersData);
-      setOverrides(overridesData);
-      if (zonesData[0]) {
-        setOverrideZoneId(zonesData[0].id);
-        setBroadcastZoneId(zonesData[0].id);
+      if (zonesRes.status === 'fulfilled' && zonesRes.value) {
+        const rawZones = zonesRes.value;
+        const validZones: ZoneListResponse[] = Array.isArray(rawZones)
+          ? rawZones
+          : ((rawZones as any)?.zones ?? []);
+        setZones(validZones);
+        if (validZones.length > 0) {
+          const firstZoneId = (validZones[0] as any).zone_id || validZones[0].id;
+          setOverrideZoneId((prev) => prev || firstZoneId);
+          setBroadcastZoneId((prev) => prev || firstZoneId);
+        }
+      } else if (zonesRes.status === 'rejected') {
+        console.error('Failed to load zones:', zonesRes.reason);
+      }
+
+      if (reportsRes.status === 'fulfilled' && reportsRes.value) {
+        const allReports = reportsRes.value.reports ?? [];
+        setPendingReports(allReports.filter((r) => r.status.toLowerCase() === 'pending'));
+        setResolvedReports(allReports.filter((r) => r.status.toLowerCase() !== 'pending'));
+      }
+
+      if (usersRes.status === 'fulfilled' && usersRes.value) {
+        setUsers(Array.isArray(usersRes.value) ? usersRes.value : []);
+      }
+
+      if (overridesRes.status === 'fulfilled' && overridesRes.value) {
+        setOverrides(Array.isArray(overridesRes.value) ? overridesRes.value : []);
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to load admin data.');
@@ -102,7 +120,7 @@ export function AdminDashboard() {
     try {
       await apiClient.createManualOverride({
         zone_id: overrideZoneId,
-        threat_level: overrideLevel as 'LOW' | 'MEDIUM' | 'HIGH' | 'DANGER',
+        threat_level: overrideLevel,
         reason: overrideReason,
       });
 
@@ -124,7 +142,7 @@ export function AdminDashboard() {
     try {
       await apiClient.broadcastAlert({
         zone_id: broadcastZoneId,
-        severity: 'DANGER',
+        severity: 'HIGH',
         headline: broadcastHeadline,
         description: broadcastDescription,
       });
@@ -284,9 +302,19 @@ export function AdminDashboard() {
                   <label className="space-y-2 text-sm font-medium text-neutral-700">
                     Zone
                     <select value={broadcastZoneId} onChange={(e) => setBroadcastZoneId(e.target.value)} className="w-full rounded-lg border border-red-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none">
-                      {zones.map((zone) => (
-                        <option key={zone.id} value={zone.id}>{zone.name}</option>
-                      ))}
+                      {zones && zones.length > 0 ? (
+                        zones.map((zone) => {
+                          const zoneId = zone.zone_id || zone.id;
+                          const zoneName = zone.name || (zone as any).zone_name || zoneId;
+                          return (
+                            <option key={zoneId} value={zoneId}>
+                              {zoneName}
+                            </option>
+                          );
+                        })
+                      ) : (
+                        <option value="" disabled>Loading zones...</option>
+                      )}
                     </select>
                   </label>
                   <label className="space-y-2 text-sm font-medium text-neutral-700">
@@ -333,19 +361,28 @@ export function AdminDashboard() {
                 <label className="space-y-2 text-sm font-medium text-neutral-700">
                   Zone
                   <select value={overrideZoneId} onChange={(e) => setOverrideZoneId(e.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none">
-                    {zones.map((zone) => (
-                      <option key={zone.id} value={zone.id}>{zone.name}</option>
-                    ))}
+                    {zones && zones.length > 0 ? (
+                      zones.map((zone) => {
+                        const zoneId = zone.zone_id || zone.id;
+                        const zoneName = zone.name || (zone as any).zone_name || zoneId;
+                        return (
+                          <option key={zoneId} value={zoneId}>
+                            {zoneName}
+                          </option>
+                        );
+                      })
+                    ) : (
+                      <option value="" disabled>Loading zones...</option>
+                    )}
                   </select>
                 </label>
 
                 <label className="space-y-2 text-sm font-medium text-neutral-700">
                   Threat level
-                  <select value={overrideLevel} onChange={(e) => setOverrideLevel(e.target.value)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none">
+                  <select value={overrideLevel} onChange={(e) => setOverrideLevel(e.target.value as RiskTier)} className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none">
                     <option value="LOW">Low</option>
                     <option value="MEDIUM">Medium</option>
                     <option value="HIGH">High</option>
-                    <option value="DANGER">Danger</option>
                   </select>
                 </label>
               </div>
@@ -535,7 +572,7 @@ export function AdminDashboard() {
                     <div>
                       <div className="mb-2 flex items-center gap-2">
                         <strong className="text-neutral-900">{report.report_type}</strong>
-                        <Badge tier={report.status.toLowerCase() === 'approved' ? 'LOW' : 'DANGER'} className="px-2 py-0.5 text-[10px]">{report.status}</Badge>
+                        <Badge tier={report.status.toLowerCase() === 'approved' ? 'LOW' : 'HIGH'} className="px-2 py-0.5 text-[10px]">{report.status}</Badge>
                       </div>
                       <p className="text-sm text-neutral-600">{report.description}</p>
                       {(report.reporter_name || report.reporter_phone) && (

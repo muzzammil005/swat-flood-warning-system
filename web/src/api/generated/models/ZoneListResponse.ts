@@ -10,7 +10,9 @@ import type { ZoneThresholdsSchema } from './ZoneThresholdsSchema';
  */
 export type ZoneListResponse = {
     id: string;
+    zone_id?: (string | null);
     name: string;
+    zone_name?: (string | null);
     coordinates: CoordinatesSchema;
     upstream_zone_id?: (string | null);
     latest_assessment?: (RiskAssessmentSchema | null);

@@ -23,10 +23,12 @@ export function ZoneFeed({ onZoneClick }: ZoneFeedProps = {}) {
   }, []);
 
   const sortedZones = useMemo(() => {
-    const riskScore = { DANGER: 4, HIGH: 3, MEDIUM: 2, LOW: 1, SAFE: 0 };
+    const riskScore: Record<string, number> = { HIGH: 3, MEDIUM: 2, LOW: 1 };
     return [...zones].sort((a, b) => {
-      const scoreA = riskScore[(a.latest_assessment?.tier as keyof typeof riskScore) ?? 'SAFE'];
-      const scoreB = riskScore[(b.latest_assessment?.tier as keyof typeof riskScore) ?? 'SAFE'];
+      const tierA = (a.latest_assessment?.tier?.toUpperCase() as keyof typeof riskScore) ?? 'LOW';
+      const tierB = (b.latest_assessment?.tier?.toUpperCase() as keyof typeof riskScore) ?? 'LOW';
+      const scoreA = riskScore[tierA] ?? 1;
+      const scoreB = riskScore[tierB] ?? 1;
       return scoreB - scoreA;
     });
   }, [zones]);
@@ -60,7 +62,7 @@ export function ZoneFeed({ onZoneClick }: ZoneFeedProps = {}) {
                   <div className="flex justify-between items-start mb-1 gap-2">
                     <h4 className="font-semibold text-slate-800 leading-tight pt-0.5">{zone.name}</h4>
                     <div className="shrink-0">
-                      <Badge tier={(zone.latest_assessment?.tier as any) || 'SAFE'} />
+                      <Badge tier={(zone.latest_assessment?.tier as any) || 'LOW'} />
                     </div>
                   </div>
                   <p className="text-sm text-slate-500 line-clamp-2 leading-relaxed">
